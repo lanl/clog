@@ -2,6 +2,10 @@
 *.pyc
 *.so
 
+# No .o or .mod files
+*.o
+*.mod
+
 # No temporary files
 *~
 
