@@ -1,0 +1,3438 @@
+Release R2 is an attempt to bundle the BPS Coulomb Logarithm work
+into a single package (stopping power, temperature equilibration,
+and energy splitting).
+
+* R2v1.0
+  07-Apr-2008  
+  All energy units are now in keV.
+
+  main1.0.f90 -- driver
+  dedx1.0.f90 -- This is v3.16 of R1.
+  vars1.0.f90 -- Global variables
+  fn1.0.f90   -- Functions used by both dedx.f90 and coeff.f90.
+
+  Not currently used:
+  globalvars.f90 -- Global variables in R1.
+  coeff1.0.f90   -- A-Coefficients from Esplit. 
+
+* 08-Apr-2008
+  The param subroutine is working to calculate the basic
+  parameters of the plasma, such as g, eta, etc. 
+
+* 11-Apr-2008
+  For temperature equilibration, the subroutine param() in 
+  main1.0.f90 now calculates (see notes1.0.tex):
+    1. ge and gi
+    2. eta
+    3. ze (for small values of ze)
+  and the subroutine bps_rate now calculates
+    4. logBPS   and tauBPS   (QM)
+    5. logBPScl and tauBPScl (CL).
+
+* R2v1.1
+  14-Apr-2008  
+  Now includes coding from int.f90 in esplit. Some of this does not
+  agree with previous results in research/15-Esplit/05-f90, so I
+  have to fix this before continuing.
+
+* R2v1.2: This is the same as v1.0 except for the repackaging. 
+  14-Apr-2008
+  Clean version 1.1:
+  - place fn1.0.f90 in dedx.f90
+  - coeff1.1.f90 -> acoeff.f90
+  - int1.3.f90   -> esplit.f90
+  - vars1.0.f90  -> vars.f90
+  - globalvars.f90 deleted
+
+* R2v1.3
+  14-Apr-2008
+  This is my new starting point [I would like to keep v1.0, v1.1, and v1.2
+  functionally equivalent]. 
+
+* 15-Apr-2008
+  Commented out the small-s behavior of the function d_aq(r,s,x) in
+  acoeff.f90. This will have to be recomputed later.
+
+
+* 1.4r2 [Version 1.4 Release 2]
+  17-Apr-2008
+  Moved param function and the rate calculation to the bottom
+  of the source code dedx.f90. I should probably give the rate
+  its own source code. 
+
+* 29-May-2008
+  Wrote basic testing code test.f90. This code will either i) write
+  output to test.dat from chosen subroutines or ii) compare the
+  modified subroutines against the previous output in test.dat.
+
+* 29-May-2008  
+  Single temperature case is working. I will temporarily preserve these 
+  routines under the new names eifrac_int_1t and dfei_int_1t (in esplit.f90). 
+  I will now work only with eifrac_int and dfei_int. 
+  to do: use the full S(E;te,ti) in dfei_int. 
+
+* 22-Jun-2008
+  Begin work on Cei_R.
+  - bps_cei_reg [basically finished]
+  - bps_hi      [this routine needs to be written]  
+
+* 24-Jun-2008
+  dedx.f90:dedx_bps: 
+  Fixed conversion from ep to vp, which now reads  
+  vp = SQRT((2./3.)*(mm/mp)*(ep*betam)). 
+  The old and new versions of fr and fi now agree:
+
+    fri(xb, fr, fi, fabs, farg)
+    PRINT *, 'old: ',ib, x, kb2(ib)*CMTOA0**2, fr*CMTOA0**2,  &
+    fi*CMTOA0**2, fr/fi
+
+  agrees with
+
+    bps_fri(nni, vp, kb2, betab, mb, fr, fi, fabs, farg)  
+    PRINT *, 'new: ',ib, x, kb2(ib), fr, fi, fr/fi
+
+* 18-Sep-2008 rate.f90: frfi_ep and di2_ep, i2_ep for single ion species
+
+  The function i2_ep(alpha,delta) agrees with cei_reg1.0.nb for
+  alpha=1 and arbitrary delta. The source code for frfi_ep and di2_ep,
+  i2_ep is given below.
+
+! electron and a single ion species
+!
+
+      SUBROUTINE i2_ep(nni, zb, betab, mb, y_ep)
+      IMPLICIT NONE
+      INTEGER,                     INTENT(IN)  :: nni  !  Number of ion species
+      REAL,    DIMENSION(1:nni+1), INTENT(IN)  :: zb   !  Charge array
+      REAL,    DIMENSION(1:nni+1), INTENT(IN)  :: betab!  Temp array[1/keV]
+      REAL,    DIMENSION(1:nni+1), INTENT(IN)  :: mb   !  Mass array [keV]
+      REAL,                        INTENT(OUT) :: y_ep
+
+      REAL,    PARAMETER :: UPM=0.7745966692E0
+      REAL,    PARAMETER :: W13=0.5555555556E0, W2=0.8888888889E0
+
+      REAL    :: xmin, xmax, x, dx, xm
+      INTEGER :: nmax, ix
+      REAL    :: hi_ep, te, ti, alpha, delta
+
+      xmin=0.
+      xmax=10.
+      nmax=200.
+      dx=(xmax-xmin)/nmax 
+      te=1./betab(1)
+      ti=1./betab(2)
+      alpha=zb(2)**2*te/ti
+      delta=SQRT(betab(1)*mb(1))/SQRT(betab(2)*mb(2))
+      y_ep=0
+      x=xmin-dx
+      DO ix=1,nmax,2
+!     
+         x=x+2.E0*dx
+         CALL di2_ep(x,alpha,delta,hi_ep)
+         y_ep=y_ep+W2*hi_ep
+!
+         xm=x-dx*UPM
+         CALL di2_ep(xm,alpha,delta,hi_ep)
+         y_ep=y_ep+W13*hi_ep
+!
+         xm=x+dx*UPM
+         CALL di2_ep(xm,alpha,delta,hi_ep)
+         y_ep=y_ep+W13*hi_ep
+      ENDDO
+      y_ep=y_ep*dx
+      END SUBROUTINE i2_ep
+
+      SUBROUTINE di2_ep(x, alpha, delta, dint2)
+      IMPLICIT NONE
+      REAL,    INTENT(IN) :: x, alpha, delta
+      REAL,    INTENT(OUT):: dint2
+      REAL                :: delta1, x2
+      REAL                :: fr_ep, fi_ep, fabs_ep, farg_ep
+      REAL                :: daw, y
+      REAL,    PARAMETER  :: PI   =3.141592654    ! pi
+      CALL frfi_ep(x,alpha,delta,fr_ep,fi_ep,fabs_ep,farg_ep)      
+      dint2=2*(fi_ep*LOG(fabs_ep) + fr_ep*farg_ep)*x
+      x2=x*x
+      dint2=dint2*EXP(-x2)
+      delta1=1-delta*delta
+      dint2=dint2/(delta + alpha*EXP(-delta1*x2))
+      dint2=dint2*(2./PI)
+      END SUBROUTINE di2_ep
+
+
+      SUBROUTINE frfi_ep(x, alpha, delta, fr, fi, fabs, farg)
+      IMPLICIT NONE
+      REAL,    INTENT(IN) :: x, alpha, delta
+      REAL                :: fr, fi, fabs, farg
+      REAL                :: daw, y
+      REAL,    PARAMETER  :: SQPI =1.772453851    ! sqrt(pi)
+      REAL,    PARAMETER  :: PI   =3.141592654    ! pi
+      y=x*delta
+      fr=1 - 2*y*daw(y)            ! electrons
+      fr=fr + alpha*(1-2*x*daw(x)) ! plus ions 
+      fi=y*Exp(-y*y)               ! electrons
+      fi=fi + alpha*x*EXP(-x*x)    ! plus ions
+      fi=fi*SQRT(PI)
+      fabs=SQRT(fr*fr + fi*fi)
+      farg=ATAN2(fi,fr)
+      END SUBROUTINE frfi_ep
+
+* 22-Oct-2008
+  Routines for multi-component plasmas (nni > 1)
+   1. bps_cei_reg : returns normalized regular contribution
+      Approximately unity for small electron mass, as it should be.
+   2. bps_cei_sing: returns normalized classical singular contribution  
+   3. bps_rate    : returns rate [adds bps_cei_reg and bps_cei_sing]
+      I still need to check normalization and pref-actors in bps_rate.
+
+* 23-Oct-2008
+  Renamed routines in 22-Oct-2008 entry to:
+   1. bps_rate_mass
+   2. bps_cei_reg_mass
+   3. bps_cei_sing_mass [classical]
+  New nomenclature indicates that the subroutine is for a general
+  electron-ion mass ratio.
+
+  4. Wrote subroutine bps_rate_el that contains the m_e -> 0 result
+     for the classical case. 
+
+* 24-Oct-2008
+  Tests do not pass with BE=13.606. Rewrote test.dat with 13.06 and
+  now tests pass. 
+
+* 27-Oct-2008
+  Split parameter definitions in vars.f90 into mathematical constants and
+  physical constants contained in modules mathvars.f90 and physvars.f90.
+  Module names are "USE mathvars" and "  USE physvars". Also placed the 
+  following parameters in:
+
+  DWB and DWA in dedx.f90:daw()
+  J1B and J1A in dedx.f90:j1()
+  J2B and J2A in dedx.f90:j2()
+  J3B and J2A in dedx.f90:j3()
+  J4B and J2A in dedx.f90:j4()
+
+  Passed test.f90.
+
+  % cvs commit
+
+  acoeff.f90: rev 1.2
+  dedx.f90  : rev 1.8
+  esplit.f90: rev 1.10
+  makefile  : rev 1.14
+  rate.f90  : rev 1.15
+  test.f90  : rev 1.6
+  vars.f90  : rev 1.3
+
+  % cvs add physvars.f90 mathvars.f90
+
+  physvars.f90 : init rev 1.1
+  mathvars.f90 : init rev 1.1
+  changelog.txt: rev 1.14
+
+* 28-Oct-2008
+  Increased accuracy of constants in mathvars.f90 to 20 significant figures.
+  Tests passed.
+
+* 25-Nov-2008
+  rate.f90: The classical contribution for general electron mass me is 
+  complete:
+   bps_rate_mass
+   bps_cei_sing_mass
+   bps_cei_reg_mass
+   dcei_reg
+   frfi
+
+  The source still includes the single ion case for the regular contribution: 
+   bps_cei_reg_ep
+   di2_ep
+   frfi_ep
+ 
+  To do:
+  1. quantum correction for general mass
+  2. code the me->0 simplifications
+
+* 25-Nov-2008
+  % cvs commit  
+ 
+* 25-Nov-2008
+  main1.0.f90 creates data for the classical paper (was delta1.f90).
+
+* 25-Nov-2008
+  SUBROUTINE bps_cei_reg_mass(nni, betab, zb, mb, nb, cei_reg)
+  from 
+   xc=SQRT(LOG(alphai/deltai))
+  to
+   xc=SQRT(ABS(LOG(alphai/deltai)))
+ 
+  note: alphai/deltai can become less than 1 for large Ti/Te
+
+* 02-Mar-2009
+  Replaced old subroutine bps_rate_first_try in rate.f90, but will 
+  remove later. I should update rate.dat (with rate.f90) later as well:
+
+* 03-Mar-2009
+  Included physvars in rate.f90. 
+
+ % test
+ calling test_plasma ...                                                                       
+  passed.                                                                                      
+ calling: test_param ...                                                                       
+  passed.                                                                                      
+ calling: test_dedx_bps ...                                                                    
+ ERROR: dedxtot                                                                                
+   43.979393035467425    
+   44.035174509058002 
+  6.33775466343782542E-004                                                                      
+ ERROR: dedxsumi                                                                               
+   4.5096072267442100                                                                          
+   4.5468218849062998                                                                          
+  4.10919775369472575E-003                                                                     
+ ERROR: dedxsumi                                                                               
+   39.469785808723216                                                                          
+   39.488352624152000                                                                          
+  2.35147583229411384E-004                                                                     
+ ERROR: dedxctot                                                                               
+   59.007220873321799                                                                          
+   59.063002347869002                                                                          
+  4.72443203928757361E-004                                                                     
+ ERROR: dedxcsumi                                                                              
+   4.6652665645286318                                                                          
+   4.7024812226765000                                                                          
+  3.97263664577921817E-003                                                                     
+  passed.                                                                                      
+ calling: test_coeff_bps ...                                                                   
+ ERROR: a_tot
+   42.108494115726998
+   42.187960547373002
+  9.42701943558606247E-004
+ ERROR: a_i
+   2.7297004215501834
+   2.7809199715653001
+  9.29469757690190058E-003
+ ERROR: a_e
+   39.378793694176814
+   39.407040575807997
+  3.58527416672220901E-004
+ ERROR: ac_tot
+   57.206442378270950
+   57.285908810045001      
+  6.94076337408300477E-004
+ ERROR: ac_i
+   2.8856283509722034
+   2.9368479009731998
+  8.79686713773765450E-003
+  passed.
+ calling: test_bps_rate ...
+  passed.
+ calling: test_eifrac_int_1t ...
+ ERROR: fe
+  0.73797757672857345
+  0.73917720365369999
+  8.12119989765790304E-004
+
+
+* 03-Mar-2009
+  Updated test.dat (write_dat=.TRUE. in test.f90).
+  Commented out "test_eifrac_int_1t" for now.
+
+
+* 18-Mar-2009
+  % cvs commit
+
+  A_sing and A_reg are now working. E<<T analytic limits are used.
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt main.f90 mathvars.f90 rate.f90 
+  CVS: ----------------------------------------------------------------------
+
+
+* 19-Mar-2009
+  % cvs commit
+
+  A_quantum is now working. The electron component agrees with the
+  asymptotic analytic form. I might want to change variables to agree
+  with the quantum integration for the C_ab. 
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 physvars.f90 
+  CVS: ----------------------------------------------------------------------
+
+  
+* 24-Mar-2009
+  Completed quantum integrand in acoeff.f90. See gr001.f90 
+  (or gr002.f90) and A_2 in changelog1.1.tex:
+      FUNCTION daq(y, a, eta)
+      USE physvars
+      IMPLICIT NONE
+      REAL,                        INTENT(IN)  :: y          ! [dimensionless]
+      REAL,                        INTENT(IN)  :: a          ! [dimensionless]
+      REAL,                        INTENT(IN)  :: eta        ! [dimensionless]
+      REAL                                     :: daq        ! [dimensionless]
+      REAL    :: repsi, sqa, au, eu
+      eu=a*eta/y 
+      au=2*SQRT(a)*y
+      daq=repsi(eu) - LOG(eu)
+      daq=daq*2*(COSH(au) - SINH(au)/(au))/au     
+      daq=-daq*EXP(-y*y)
+      END FUNCTION daq
+
+  The quantum term for A is now working. I implemented the form A_2 from
+  changelog1.1.tex, now called daq in acoeff.f90. This form contains a
+  factor exp(-y^2) that cuts the upper limit (of infinity) off at the
+  same finite value (y=20 is good) for all ion species. The upper limit
+  for other forms is forms are species dependent since they contain
+  exp(-a u^2) where a = (1/2) beta_b m_b v_p^2. The drivers for testing
+  are gr001.f90 and gr002.f90
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt main.f90 makefile 
+  CVS: ----------------------------------------------------------------------
+
+* 26-Mar-2009
+  # cvs commit
+  All three terms A_sing, A_regular, A_quantum now agree with the low
+  energy analytic limits. 
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt dedx.f90 makefile 
+  CVS: ----------------------------------------------------------------------
+
+* 10-Apr-2009
+  # cvs commit
+  Made daq() and dab_reg() more robust by setting exp(-BIG)=1 by
+  hand [in daq I use BIG=30 and in dab_reg I use BIG=10].
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt main.f90 makefile 
+  CVS: ----------------------------------------------------------------------
+
+  dab_reg:
+  ...
+  ...
+         IF (ic == ib) THEN
+            ex=1
+         ELSE
+            au=(a_ic-a_ib)*u
+            IF (ABS(au) <= 10) THEN
+              ex=EXP(-au)
+            ELSE
+              ex=1
+            ENDIF
+         ENDIF
+
+  dq:
+  ...
+  ...
+      IF (a <= 30) THEN
+        up=(u+1)**2
+        um=(u-1)**2
+        ep=EXP(-a*up)
+        em=EXP(-a*um)
+        cau=0.5*(ep + em)
+        sau=0.5*(ep - em)
+      ELSE
+        cau=0
+        sau=0
+      ENDIF
+      daq=-daq*2*(cau - sau/(au))/au     
+
+  See also gr004.f90 for exploratory code. 
+  
+* 14-Apr-2009
+  A_reg now conforms to notes in changelog1.3.tex, i.e. the coefficient
+  is now c1= e_b^2 k_b^2/4Pi and the integrand involving R now contains
+  the factor of K. 
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt 
+  CVS: ----------------------------------------------------------------------
+
+  acoeff.f90 now reads:
+
+...
+...
+         ac_r=c1*ac_r <======
+ and
+
+      FUNCTION dab_reg(u, vp, ib, nni, k2, kb2, betab, mb, nb)
+...
+...   
+      ab=SQRT(0.5*betab*mb)*vp/CC
+      alfb=kb2/k2
+      CALL frfi(u,nni,alfb,ab,fr,fi,fabs,farg)
+      h=2*(fr*farg + fi*LOG(fabs))
+!
+! construct spectral weight ratio Rb=rho_b/rho_tot
+!
+      r_ib=0
+      bm_ib=betab(ib)*mb(ib)
+      a_ib =ab(ib)*ab(ib)
+      DO ic=1,nni+1
+         kcb=kb2(ic)/k2  <=======
+         bm_ic=betab(ic)*mb(ic)
+         a_ic =ab(ic)*ab(ic)
+...
+...
+
+
+* 24-Apr-2009
+  Cleaned up acoeff.f90.
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 main.f90 physvars.f90 vars.f90 
+  CVS: ----------------------------------------------------------------------
+
+
+* 24-Apr-2009
+
+  Low energy limits are now working, but I have not put them in the
+  code yet. See 6-A_asymptotic/coulombLog/gr004.f90.
+
+
+  a_sing_gr004:
+
+  k   = kd                    ! [1/cm]
+  ab  =0.5*betab*mb*vp2/CC2   ! [dimensionless] 
+  a   =ab(ib)                 !
+  ac_s_lim=-(2./3. - 0.4*a)*(LOG(betab(ib)*BEKEV*ABS(zp*zb(ib))* &
+    0.5*k*A0CM*mbpb(ib) ) + 2*GAMMA) - (4./15.)*a
+  ac_s_lim=c1*c2*ac_s_lim
+
+
+  a_reg_gr004:
+
+  REAL,    PARAMETER :: THIRD=1./3.                 ! 1/3=0.333333....
+  ck=2*BEKEV*k2*A0CM        ! [keV/cm]
+  ck=ck*1.E-7               ! [MeV/micron]
+  ab  =0.5*betab*mb*vp2/CC2   ! [dimensionless] 
+  a   =ab(ib)                 ! 
+  k   = kd                    ! [1/cm]
+  ar1 =-2*SUM(kb2*ab)/k2/5.   ! [dimensionless] coeff for A_reg with E<<T
+  ar2 = SUM(kb2*ab2)/k2       ! [dimensionless] coeff for A_reg with E<<T
+  ar2 = ar2*ar2*PI/30.
+  ac_r_lim=-c2*(kb2(ib)/k2)*((THIRD - 0.2*a)*(LOG(kd2/k2)+1) + ar1 + ar2 )
+  ac_r_lim=ck*ac_r_lim  ! note: need to replace ck by c1.
+
+
+  a_q_gr004
+
+  etbar=4.2115E-3*ABS(zp*zb(ib))*SQRT(betab(ib)*mb(ib))
+  etbar2=etbar*etbar
+   IF (ib==1) THEN
+      aq_lim=LOG(1.5*etbar2)/3 + GAMMA  ! electrons only eta_pe << 1
+      aq_lim=c1*c2*aq_lim
+   ELSE
+     aq_lim=-1./(27*etbar2)
+     aq_lim=c1*c2*aq_lim
+  ENDIF
+
+  NOTE: For safe keeping, I need to place this in a subroutine 
+  a_small_e_lim() within acoeff.f90
+
+* 24-Apr-2009
+  gr005.f90
+
+  Asymptotic forms for high energy ion terms
+  a_sing: working
+  a_reg : not working
+  a_q   : not working
+
+* 01-May-2009
+  a_q suffers from NANs at high energy. To fix this we must decompose
+  SINH and COSH into exponential form; however, this procedure fails for
+  the low energy regime. We now use a conditional IF-THEN on the
+  argument of SINH and COSH in acoeff.f90:
+
+      FUNCTION daq(u, a, eta)
+      USE physvars
+        IMPLICIT NONE
+        REAL,                        INTENT(IN)  :: u          ! [dimensionless]
+        REAL,                        INTENT(IN)  :: a          ! [dimensionless]
+        REAL,                        INTENT(IN)  :: eta        ! [dimensionless]
+        REAL                                     :: daq  ! [dimensionless]
+        REAL, PARAMETER :: AUMAX=15.
+        REAL            :: repsi, au, eu, au2, ap, am, psilog, ch, sh
+        eu=eta/u 
+        psilog=repsi(eu) - LOG(eu)
+        au =2*a*u
+        au2=a*u*u
+        IF (au <= AUMAX) THEN      
+          ch =EXP(-au2)*COSH(au)
+          sh =EXP(-au2)*SINH(au)
+        ELSE
+          ap = au-au2-a
+          am =-au-au2-a
+          ch =0.5*(EXP(ap)+EXP(am))
+          sh =0.5*(EXP(ap)-EXP(am))
+        ENDIF
+        daq=-psilog*2*(ch - sh/au)/au
+     END FUNCTION daq
+
+  note: Looked again at this code segment on 20-May-2009. For values
+  of Ep > 500 keV, the above does not work at high energies. The 
+  IF-THEN causes a discontinuity in the integrand at Ep=500 (between
+  499 and 500). I think the high energy expression (after the ELSE) 
+  should work all values of au. check this.
+
+
+* 01-May-2009
+  The low-energy limits for a_sing, a_reg, and a_quantum have now been
+  placed in acoeff.f90 in their own subroutine a_asymptotic_small_E. 
+  This will be used later when I incorporate the asymptotic limits in
+  the A-coefficient code coeff_bps.
+
+
+* 01-May-2009
+  TEST CODE: should be placed in the main driver:
+!
+! quick test of low energy limits
+!
+      ep0=1.E-8 ! [keV]
+      ep1=1.    ! [keV]
+      nep=5
+      dep=(ep1-ep0)/nep
+      WRITE(1,'(A44)') '# iu, ep, ac_se, ac_se_lim, ac_si, ac_si_lim'
+      WRITE(2,'(A44)') '# iu, ep, ac_re, ac_re_lim, ac_ri, ac_ri_lim'
+      DO iu=0,nep
+         ep=ep0 + dep*iu
+
+         CALL coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+            a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+
+         ib=2  ! ib=1 for e; ib=2 for sum of ions
+         IF (ib == 1) THEN
+           CALL  a_asymptotic_small_E(nni,ib,ep,zp,mp,betab,zb,mb,nb, &
+             ac_s_lim,ac_r_lim,aq_lim)
+           ac_s=ac_s_lim
+           WRITE(6,'(I3,8E14.4)') ib, ep, ac_se, ac_re, aq_e
+           WRITE(6,'(I3,8E14.4)') ib, ep, ac_s_lim, ac_r_lim, aq_lim
+         ELSE
+           ib=2
+           CALL  a_asymptotic_small_E(nni,ib,ep,zp,mp,betab,zb,mb,nb, &
+             ac_s_lim,ac_r_lim,aq_lim)
+           ac_s=ac_s_lim
+           ac_r=ac_r_lim
+           aq  =aq_lim
+           ib=3
+           CALL  a_asymptotic_small_E(nni,ib,ep,zp,mp,betab,zb,mb,nb, &
+             ac_s_lim,ac_r_lim,aq_lim)
+           ac_s_lim=ac_s+ac_s_lim
+           ac_r_lim=ac_r+ac_r_lim
+           aq_lim  =aq  +aq_lim
+           WRITE(6,'(I3,8E14.4)') ib, ep, ac_si, ac_ri, aq_i
+           WRITE(6,'(I3,8E14.4)') ib, ep, ac_s_lim, ac_r_lim, aq_lim
+         ENDIF
+      ENDDO
+      STOP
+
+
+* 01-May-2009
+  % cvs commit
+  acoeff.f90: (1) fixed function daq to handle low and high energy, (2) placed
+  the low energy asymptotic limits in a new subroutine a_asymptotic_small_E,
+  (3) reformatted acoeff.f90 such that SUBROUTINE starts on line 7 and other
+  lines are indented by two characters. 
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt makefile 
+  CVS: ----------------------------------------------------------------------
+
+
+* 06-May-2009
+  Quantum integration and high energy asymptotic limit for the ions
+  now seems to be working.  See gr015.f90. The integration limit is
+  now a=(1/2)beta m v_p^2 dependent. Have not yet placed this code in
+  gr005.f90 or acoeff.f90.  Still need the high energy for electrons.
+
+
+* 18-May-2009
+  % cvs commit
+
+Choose appropriate limits of integration set for quantum piece:
+
+        IF (ib == 1) THEN
+           u0=0
+           u1=4./SQRT(a)
+        ELSE
+           u0=1-10./SQRT(a)
+           u0=MAX(0.,u0)  
+           u1=1+10./SQRT(a)
+        ENDIF
+
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	acoeff.f90 changelog.txt makefile 
+CVS: ----------------------------------------------------------------------
+
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.15; previous revision: 1.14
+done
+
+
+* 18-May-2009
+  Testing asymptotic limits. 
+  Too cluttered in physics/working/6-A_assymtotic/coulombLog, so I
+  moved directory to coulombLog_1.0 and did a new cvs checkout.
+
+  
+* 19-May-2009
+  gr005.f90 works for the regular, singular, and quantum pieces,
+  including the low energy asymptotic forms. Agreement with
+  acoeff.f90.
+
+  gr005.f90
+  Small energy asymptotic cf. analytic/numerical results
+  gr015.dat ! A_regular             a_reg_gr005()
+  gr025.dat ! A_singular            a_sing_gr005()
+  gr035.dat ! A_singular            a_sing_gr005()
+  gr045.dat ! A_quantum             a_q_gr005()
+  gr055.dat ! from acoeff.f90       coeff_bps()
+                                    coeff_bps_small_E()
+                                    a_asymptotic_small_E()
+
+* 19-May-2009
+  % cvs commit
+
+acoeff.f90: Small energy asymptotic routine coeff_bps_small_E() returns
+the same output as coeff_bps. Uses the routine a_asymptotic_small_E().
+Small energy asymptotic forms check with analytics/numerics.
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	acoeff.f90 changelog.txt makefile 
+CVS: ----------------------------------------------------------------------
+
+Checking in acoeff.f90;
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.17; previous revision: 1.16
+
+
+* 20-May-2009
+  See gr005.f90. The quantum integrand in daq_gr005() used the code block
+
+      REAL, PARAMETER :: AMAX=25.
+      IF (a <= AMAX) THEN      
+         ch =EXP(-au2)*COSH(au)
+         sh =EXP(-au2)*SINH(au)
+      ELSE
+        ap = au-au2-a
+        am =-au-au2-a
+        ch =0.5*(EXP(ap)+EXP(am))
+        sh =0.5*(EXP(ap)-EXP(am))
+      ENDIF
+      csh=2*(ch - sh/au)/au
+      daq_gr006=-psilog*csh
+
+  The IF-THEN causes a discontinuity in daq between Ep=499 and Ep=500. For
+  Ep=499 peak values are daq ~ -1*10^6; at Ep=500 peak values are daq~-0.002.
+  Continuity returns if we block out the first IF-statement:
+
+     ap = au-au2-a
+     am =-au-au2-a
+     ch =0.5*(EXP(ap)+EXP(am))
+     sh =0.5*(EXP(ap)-EXP(am))
+     csh=2*(ch - sh/au)/au
+     daq_gr006=-psilog*csh
+
+  The entry on 01-May-2009 (getting rid of the NANs), however, warns against
+  this. Did I make a mistake then? check this.
+
+* 26-May-2009
+  gr005.f90
+  It seems fine to remove the IF-THEN from the quantum integrand, but
+  trouble may arise later [keep this in mind]. 
+
+
+
+* 26-May-2009
+  % cvs commit
+
+Removed the IF-THEN cut on the parameter a in the quantum integrand,
+which now reads:
+
+      FUNCTION daq(u, a, eta)
+      USE physvars
+        [...]
+        eu=eta/u 
+        psilog=repsi(eu) - LOG(eu)
+        au =2*a*u
+        au2=a*u*u
+        ap = au-au2-a
+        am =-au-au2-a
+        ch =0.5*(EXP(ap)+EXP(am))
+        sh =0.5*(EXP(ap)-EXP(am))
+        csh=2*(ch - sh/au)/au
+        daq_gr005=-psilog*csh
+      END FUNCTION daq
+
+NOTE: changelog.txt entry of 01-May-2009 cautions against this at
+low energy, but I can't find a problem. Use this for now, but keep
+this in mind.
+
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	acoeff.f90 changelog.txt makefile mathvars.f90 
+CVS:
+----------------------------------------------------------------------
+
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.18; previous revision: 1.17
+done
+Checking in changelog.txt;
+/local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+new revision: 1.32; previous revision: 1.31
+done
+Checking in makefile;
+/local/bobs/physics/REPO/coulombLog/makefile,v  <--  makefile
+new revision: 1.30; previous revision: 1.29
+done
+Checking in mathvars.f90;
+/local/bobs/physics/REPO/coulombLog/mathvars.f90,v  <--  mathvars.f90
+new revision: 1.5; previous revision: 1.4
+done
+
+* 26-May-2009
+  % cvs commit
+  [fixed typo in daq()]
+
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.19; previous revision: 1.18
+done
+Checking in changelog.txt;
+/local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+new revision: 1.33; previous revision: 1.32
+
+
+* 26-May-2009
+  acoeff.f90
+
+  Placed the high energy limits in subroutine:  
+  SUBROUTINE a_asymptotic_high_E(nni, ib, ep, zp, mp, betab, zb, mb, nb, &
+  ac_s_lim, ac_r_lim, aq_lim)
+
+Checking in acoeff.f90;
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.20; previous revision: 1.19
+done
+Checking in changelog.txt;
+/local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+new revision: 1.34; previous revision: 1.33
+done
+
+
+* 26-May-2009
+  The IF-THEN cut on au in dab_reg_gr006() is the reason for the
+  poor behavior of A_reg at large energy. 
+      r_ib=0
+      bm_ib=betab(ib)*mb(ib)
+      a_ib =ab(ib)*ab(ib)
+      DO ic=1,nni+1
+         kcb=kb2(ic)/k2
+         bm_ic=betab(ic)*mb(ic)
+         a_ic =ab(ic)*ab(ic)
+         IF (ic == ib) THEN
+            ex=1
+         ELSE
+            au=(a_ic-a_ib)*u
+            IF (ABS(au) <= 50) THEN
+              ex=EXP(-au)
+            ELSE
+              ex=1
+              ex=EXP(-au)
+            ENDIF
+         ENDIF
+         r_ib=r_ib + kcb*SQRT(bm_ic/bm_ib)*ex
+      ENDDO      
+  
+  I have now removed the "IF (ABS(au)<=50) THEN" statement
+
+
+* 26-May-2009
+  % cvs commit
+
+  Removed IF-THEN cut on au in function dab_reg. This cut created bad
+  behavior for A_reg at high energies. Relevant code segment now reads:
+
+           IF (ic == ib) THEN
+              ex=1
+           ELSE
+              au=(a_ic-a_ib)*u
+              ex=EXP(-au)
+           ENDIF
+           r_ib=r_ib + kcb*SQRT(bm_ic/bm_ib)*ex
+        ENDDO      
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	acoeff.f90 changelog.txt 
+CVS: ----------------------------------------------------------------------
+
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.21; previous revision: 1.20
+done
+Checking in changelog.txt;
+/local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+new revision: 1.35; previous revision: 1.34
+done
+
+---
+
+* 15-Jun-2009
+  % cvs commit
+  First commit after a long break.
+
+  /local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+  new revision: 1.36; previous revision: 1.35
+  done
+  Checking in makefile;
+  /local/bobs/physics/REPO/coulombLog/makefile,v  <--  makefile
+  new revision: 1.31; previous revision: 1.30
+  done
+  Checking in mathvars.f90;
+  /local/bobs/physics/REPO/coulombLog/mathvars.f90,v  <--  mathvars.f90
+  new revision: 1.6; previous revision: 1.5
+
+* 15-Jun-2009
+  Routines in acoeff.f90 to date:
+
+      SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+            a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e, ac_re)
+
+      SUBROUTINE a_sing(a, b, ac_s)
+      FUNCTION dab_sing(u, a, b)
+
+      SUBROUTINE a_reg(ib, nni, vp, k2, kb2, betab, mb, nb, ac_r)
+      FUNCTION dab_reg(u, vp, ib, nni, k2, kb2, betab, mb, nb)
+
+      SUBROUTINE a_quantum(ib, a, eta, aq)
+      FUNCTION daq(u, a, eta)
+
+      SUBROUTINE a_asymptotic_high_E(nni, ib, ep, zp, mp, betab, zb, mb, nb, &
+         ac_s_lim, ac_r_lim, aq_lim)
+!
+! electron contribution in a_asymptotic_high_E is not yet working [there
+! are two high energy regimes]
+!
+
+      SUBROUTINE a_asymptotic_small_E(nni, ib, ep, zp, mp, betab, zb, mb, nb, &
+         ac_s_lim, ac_r_lim, aq_lim)
+      SUBROUTINE coeff_bps_small_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+
+
+* 17-Jun-2009
+  gr008.f90 plots A-coefficients for Dean.
+
+----
+
+
+* 19-Aug-2009
+  % cvs commit
+
+  The changes between 15-17 June 2009 did not show up in the most 
+  recent cvs checkout, so I did a new commit. 
+
+  1. acoeff.f90
+     % diff acoeff.f90 ../coulombLog/acoeff.f90
+21c21
+<                                                            ! A-coeffs [MeV/micron]
+---
+>                                                            ! A-coeffs [keV/micron]
+31c31
+<         REAL,                        INTENT(OUT) :: ac_re  !  *remove*
+---
+>         REAL,                        INTENT(OUT) :: ac_re   !  *remove*
+98c98
+<            c1=c1*1.E-7               ! [MeV/micron]
+---
+>            c1=c1*1.E-7               ! [MeV/micron]
+
+
+
+  2. dedx.f90
+     % diff dedx.f90 ../coulombLog/dedx.f90 [same]
+
+  3. esplit.f90
+     % diff esplit.f90 ../coulombLog/esplit.f90 [same]
+
+  4. mathvars.f90
+     % diff mathvars.f90 ../coulombLog/mathvars.f90 [same]
+
+  5. vars.f90
+     % diff vars.f90 ../coulombLog/vars.f90 [same]
+
+  6. physvars.f90
+     % diff physvars.f90 ../coulombLog/physvars.f90 [same]
+
+  7. rate.f90
+     % diff rate.f90 ../coulombLog/rate.f90
+
+* 19-Aug-2009
+  1. Replaced main.f90 with gr008.f90.
+  2. Removed main1.0.f90 and main2.0.f90
+     % rm main1.0.f90
+     % cvs remove main1.0.f90  [same with main2.0.f90]
+     % cvs commit
+     cvs log file:
+
+  Removed extraneous main1.0.f90 and main2.0.f90. Modified main.f90 to
+  produce output suitable for plotting. 
+
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	changelog.txt main.f90 makefile 
+CVS: Removed Files:
+CVS: 	main1.0.f90 main2.0.f90 
+CVS: ----------------------------------------------------------------------
+
+  3. Added plotting routine main.gnu. 
+     % cvs add main.gnu
+     % cvs commit
+     cvs log file:
+
+Plotting routine main.gnu for main.f90.
+CVS: ----------------------------------------------------------------------
+CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+CVS: 
+CVS: Committing in .
+CVS: 
+CVS: Modified Files:
+CVS: 	changelog.txt 
+CVS: Added Files:
+CVS: 	main.gnu 
+CVS: ----------------------------------------------------------------------
+
+
+* 29-Sep-2009
+  Updated version of BPSparameters.nb [taken from 
+  coulomb_energy_exchange1.0.nb]
+
+
+* 20-Oct-2009
+  I have been checking asymptotic limits with the source code
+  physics/working/6-A_assymtotic/coulombLog_1.x with x=0,1,..,7. 
+  It is time to collect changes and clean up the code a bit.    
+
+
+* 20-Oct-2009
+  Taking stock of current state of the code coulombLog.
+
+  1. Fresh checkout of coulombLog:
+     % cd physics/working/6-A_assymtotic
+     % cvs co coulombLog
+
+  2. Code inventory:
+     source                    date           bytes  time
+     ---------------------------------------------------------
+     ferf.f      :             May 13  2008    105   
+     esplit.f90  :             Oct 27  2008  36444   
+     rate.f90    :             Mar 18  2009  13868  
+     dedx.f90    :             Mar 26  2009  42106  
+     physvars.f90:             Apr 24  2009   1630  11:18
+     vars.f90    :             Apr 24  2009   3590  11:18
+     mathvars.f90:             Jun 15  2009    955  17:13
+     acoeff.f90  :             Aug 19  2009  22602  10:59
+     main.f90    :             Aug 19  2009   8833  12:53
+     ----------------------------------------------------
+     test.dat                  Mar  3  2009   1128 
+     test.f90                  Mar 13  2009  24937 
+     main.gnu                  Aug 19  2009    692  12:53
+     BPSparameters.nb          Sep 29  2009  64950  11:14
+     makefile                  Oct 20  2009    802  10:35
+     changelog.txt             Oct 20  2009  34706  10:47
+     CVS/                      Oct 20  2009      5  10:32
+     ----------------------------------------------------
+     doc/                      Oct 20  2009     12  10:32
+      BPS_phys_rep.pdf         Jun 25  2008 797669 
+      dedxFortran.bps2.1.pdf   Jun 25  2008 363819 
+      dedxFortran.bps2.1.tex   Jun 25  2008 207046 
+      dedxFortran.bps2.2.pdf   Jun 25  2008 448258 
+      dedxFortran.bps2.2.tex   Jun 25  2008 207215 
+      cei_reg1.0.tex           Jul  5  2008  18464 
+      cei_reg1.1.tex           Nov 25  2008  43907 
+      cei_reg1.2.tex           Nov 25  2008  49633 
+      rate1.0.tex              Dec  4  2008  49169 
+      CVS/                     Oct 20  2009      5 
+
+  3. Compare source with physics/working/6-A_assymtotic/coulombLog_1.7
+     a. % diff ferf.f       ../coulombLog_1.7/ferf.f
+     b. % diff esplit.f90   ../coulombLog_1.7/esplit.f90
+     c. % diff rate.f90     ../coulombLog_1.7/rate.f90
+     d. % diff dedx.f90     ../coulombLog_1.7/dedx.f90
+     e. % diff test.f90     ../coulombLog_1.7/test.f90
+     f. % diff physvars.f90 ../coulombLog_1.7/physvars.f90
+     g. % diff vars.f90     ../coulombLog_1.7/vars.f90
+     h. % diff mathvars.f90 ../coulombLog_1.7/mathvars.f90
+     i. % diff main.f90   ../coulombLog_1.7/main.f90
+     j. % diff acoeff.f90   ../coulombLog_1.7/acoeff.f90
+        [a few relevant comments added in coulombLog_1.7/acoeff.f90]
+        83c83
+        <            ! ab=(1/2) betab(ib)*mb(ib)*vp2/CC2
+        ---
+        >              ! ab=(1/2) betab(ib)*mb(ib)*vp2/CC2
+        95c95
+        <            eta=ABS(zp*zb(ib))*2.1870E8/vp
+        ---
+        >            eta=ABS(zp*zb(ib))*2.1870E8/vp ! defined with projectile velocity vp
+        355c355
+        <            ac_s_lim=-cs*ac_s_lim*1.E-7          ! [keV/micron]
+        ---
+        >            ac_s_lim=-cs*ac_s_lim*1.E-7          ! [MeV/micron]
+        368c368
+        <            ac_r_lim=ac_r_lim*1.E-7                        ! [keV/micron]
+        ---
+        >            ac_r_lim=ac_r_lim*1.E-7                        ! [MeV/micron]
+        450c450,451
+        < ! quantum: asymptotic low energy form
+        ---
+        > ! quantum: asymptotic low energy form: etbar defined with thermal velocity
+        > ! [$\bar eta_{pb} = e_p e_b/4\pi \hbar \bar v_b $  with $\bar v_b^2 = 3 T_b/m_b$]
+        % ls -l acoeff.f90 ../coulombLog_1.7/acoeff.f90
+          -rw-------+ 1 bobs1 x7 22602 Aug 19 10:59 acoeff.f90
+          -rw-------+ 1 bobs1 x7 22760 Oct 19 15:27 ../coulombLog_1.7/acoeff.f90
+        % cp -rp ../coulombLog_1.7/acoeff.f90 . [use new acoeff.f90]
+
+
+  4. Results of test [need to fix this at some point]
+     % make [test]
+     % clog
+       calling test_plasma ...
+       passed.
+       calling: test_param ...
+       passed.
+       calling: test_dedx_bps ...
+       ERROR: dedxtot
+       44.0351744067909
+       43.9793930354670
+       6.337743051517112E-004
+       ERROR: dedxsumi
+       4.54682188454721
+       4.50960722674420
+       4.109197714208689E-003
+       ERROR: dedxsumi
+       39.4883525222437
+       39.4697858087230
+       2.351462928735884E-004
+       ERROR: dedxctot
+       59.0630022446453
+       59.0072208733220
+       4.724423300833464E-004
+       ERROR: dedxcsumi
+       4.70248122233163
+       4.66526656452860
+       3.972636609114671E-003
+       passed.
+       calling: test_coeff_bps ...
+       Segmentation fault
+
+  5. Commit
+     % cvs commit
+       [changes to acoeff.f90, and to makefile and changelog.txt]
+       cvs commit: Examining .
+       cvs commit: Examining doc
+       Checking in acoeff.f90;
+       /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+       new revision: 1.23; previous revision: 1.22
+       done
+       Checking in changelog.txt;
+       /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+       new revision: 1.41; previous revision: 1.40
+       done
+       Checking in makefile;
+       /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+       new revision: 1.35; previous revision: 1.34
+       done
+
+
+* 20-Oct-2009
+  Must now remove extraneous and unused variables from source because 
+  the new makefile flag checks for all unused or unassigned variables.
+
+  1. test.f90
+     Removed e0 and ec from SUBROUTINE data_generate.
+     Removed a few unused variable declarations.
+     % cvs commit    
+     Log Entry:
+
+       a. SUBROUTINE data_generate(nni, ep, zp, mp, betab, zb, mb, nb, e0, ec)
+                                                                        ^   ^
+                                                                      removed
+       b. Removed a few unused variable declarations.
+       CVS: ---------------------------------------------------------------------
+       CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+       CVS: 
+       CVS: Committing in .
+       CVS: 
+       CVS: Modified Files:
+       CVS: changelog.txt test.f90 
+       CVS: ---------------------------------------------------------------------
+
+       cvs commit: Examining .
+       cvs commit: Examining doc
+       Checking in changelog.txt;
+       /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+       new revision: 1.42; previous revision: 1.41
+       done
+       Checking in test.f90;
+       /home/bobs1/physics/REPO/coulombLog/test.f90,v  <--  test.f90
+       new revision: 1.10; previous revision: 1.9
+       done
+
+  2. acoeff.f90
+     a. Removed variable ac_re_lim from coeff_bps_small_E()
+     b. Removed variable ac_re     from coeff_bps()
+     c. Calls to coeff_bps in esplit.f90 are not consistent. Fix this later.
+
+     % cp ../coulombLog/gr001.f90 main.f90 [use gr001.f90 as the main
+     driver for acoeff.f90]
+     NOTE: I don't like calling sequence in coeff_bps. Ion components
+     are returned before electron. Change this later.
+
+  3. main.f90 
+     d. Removed variable ac_re     from coeff_bps()
+
+     % cvs commit
+     Log Entry:
+
+       acoeff.f90
+         Removed variable ac_re_lim from coeff_bps_small_E()
+         Removed variable ac_re     from coeff_bps()
+         Calls to coeff_bps in esplit.f90 are not consistent. Fix this later.
+       main.f90 
+         Removed variable ac_re from coeff_bps()
+
+       NOTE: I don't like calling sequence in coeff_bps. Ion 
+       components are returned before electron:
+         SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+         a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+       I would rather it be:
+         SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+         a_tot, a_e, a_i, ac_tot, ac_e, ac_i, aq_tot, aq_e, aq_i)
+       but will change this later.
+
+       CVS: ---------------------------------------------------------------------
+       CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+       CVS: 
+       CVS: Committing in .
+       CVS: 
+       CVS: Modified Files:
+       CVS: acoeff.f90 changelog.txt main.f90 makefile 
+       CVS: ---------------------------------------------------------------------
+
+       cvs commit: Examining .
+       cvs commit: Examining doc
+       Checking in acoeff.f90;
+       /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+       new revision: 1.24; previous revision: 1.23
+       done
+       Checking in changelog.txt;
+       /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+       new revision: 1.43; previous revision: 1.42
+       done
+       Checking in main.f90;
+       /home/bobs1/physics/REPO/coulombLog/main.f90,v  <--  main.f90
+       new revision: 1.12; previous revision: 1.11
+       done
+       Checking in makefile;
+       /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+       new revision: 1.36; previous revision: 1.35
+       done
+
+  4. rate.f90 
+  5. esplit.f90
+     % cvs commit
+       [...]
+       cvs commit: Examining .
+       cvs commit: Examining doc
+       Checking in changelog.txt;
+       /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+       new revision: 1.44; previous revision: 1.43
+       done
+       Checking in esplit.f90;
+       /home/bobs1/physics/REPO/coulombLog/esplit.f90,v  <--  esplit.f90
+       new revision: 1.11; previous revision: 1.10
+       done
+       Checking in makefile;
+       /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+       new revision: 1.37; previous revision: 1.36
+       done
+       Checking in rate.f90;
+       /home/bobs1/physics/REPO/coulombLog/rate.f90,v  <--  rate.f90
+       new revision: 1.21; previous revision: 1.20
+       done
+
+  6. dedx.f90
+     % cvs commit
+       [...]
+       cvs commit: Examining .
+       cvs commit: Examining doc
+       Checking in changelog.txt;
+       /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+       new revision: 1.45; previous revision: 1.44
+       done
+       Checking in dedx.f90;
+       /home/bobs1/physics/REPO/coulombLog/dedx.f90,v  <--  dedx.f90
+       new revision: 1.10; previous revision: 1.9
+       done
+
+* 20-Oct-2009
+  Change name of coulombLog to coulombLog_1.8 and continue checking
+  asymptotics. Must copy notes and other drivers from coulombLog_1.7.
+
+  gr001.f90 now opens and writes to small-E and large-E files [don't
+  need gr004.f90, gr005.f90, gr006.f90]  
+
+  % cvs commit
+    Added the interface coeff_bps_highE() to a_asymptotic_high_E() to acoeff.f90.
+
+    SUBROUTINE coeff_bps_high_E(nni, ep, zp, mp, betab, zb, mb, nb, &
+      a_tot_lim, a_i_lim, a_e_lim, ac_tot_lim, ac_i_lim, ac_e_lim,  &
+      aq_tot_lim, aq_i_lim, aq_e_lim)
+
+    SUBROUTINE a_asymptotic_high_E(nni, ib, ep, zp, mp, betab, zb, mb, nb, &
+      ac_s_lim, ac_r_lim, aq_lim)
+
+    [...]
+    cvs commit: Examining .
+    cvs commit: Examining doc
+    Checking in acoeff.f90;
+    /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+    new revision: 1.25; previous revision: 1.24
+    done
+    Checking in changelog.txt;
+    /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+    new revision: 1.47; previous revision: 1.46
+    done
+    Checking in main.f90;
+    /home/bobs1/physics/REPO/coulombLog/main.f90,v  <--  main.f90
+    new revision: 1.13; previous revision: 1.12
+    done
+    Checking in makefile;
+    /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+    new revision: 1.38; previous revision: 1.37
+    done
+
+* 21-Oct-2009
+  NOTE: I think I found a small bug in the acoeff code. The constant
+  c1 is missing a factor of zp^2.
+  acoeff.f90 in coeff_bps:
+
+  !        ep^2 kb^2
+  ! c1  =  --------- = 2 Be * kb^2 * a0  [keV/cm] <== Z_p^2 ????
+  !           4 Pi                       
+  c1=2*BEKEV*kb2(ib)*A0CM   ! [keV/cm]
+
+  This mistake is also present in the asymptotic forms, which accounts
+  for their agreement.
+
+
+* 22-Oct-2009
+  Confirmation that acoeff is off by zp^2.
+  For E >> T it should follow that A_b dE_b/dx start to agree. Upon
+  multiplying the A-coeff output by zp^2 I find agreement. See
+  physics/working/6-A_assymtoticcoulombLog_1.9/gr_zp2.f90 for the source:
+
+  total                electron             ion
+  0.315203675916392    0.306712224572776    8.491451343615276E-003  : acoeff
+  0.321192352821069    0.308116401843333    1.307595097773610E-002  : dedx
+
+  The above are not quite equal, but this shows that zp^2 (for and
+  alpha particle zp^2=4), so there may be other issues; however, this
+  resolves the factor of zp^2 problem. 
+
+
+  !
+  ! Plasma parameters
+  !
+  te=1.       ! Electron temperature       [keV]
+  ti=1.       ! Ion temperature            [keV]
+  ne=1.E25    ! Electron number density    [cm^-3]
+  !
+  ! Projectile parameters (alpha particle)
+  !
+  ep=1000.      ! Projectile energy  [keV]
+  mp=4*MPKEV   ! Projectile mass    [keV]
+  zp=2.        ! Projectile charge  [e]
+  !
+  ! DT plasma with alpha particle projectile
+  !
+  CALL define_plasma(te,ti,ne)
+  CALL coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+  a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+  CALL dedx_bps(nni, ep, zp, mp, betab, zb, mb, nb, dedxtot, &
+  dedxsumi, dedxe, dedxctot, dedxcsumi, dedxqtot, dedxqsumi)
+  PRINT *, zp**2*a_tot, zp**2*a_e, zp**2*a_i                       ! MeV/micron
+  PRINT *, dedxtot/1000., (dedxtot-dedxsumi)/1000., dedxsumi/1000. ! MeV/micron
+
+  The output of dedx is in kev/micron, so I had to divide by 1000 to
+  give the units MeV/micron.
+
+
+* 22-Oct-2009
+  Included zp**2 in the definition of c1=ep^2 kb^2/4Pi.
+  % cvs commit
+    [...]
+    Checking in acoeff.f90;
+    /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+    new revision: 1.26; previous revision: 1.25
+    done
+    Checking in changelog.txt;
+    /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+    new revision: 1.48; previous revision: 1.47
+    done
+
+
+* 24-Oct-2009
+  Difference between acoeff.f90 for 1.09 and 1.10:
+
+  % cd coulombLog_1.10
+  % diff ./coulombLog_1.09/acoeff.f90 acoeff.f90
+  31,32d30
+  < !       REAL,                        INTENT(OUT) :: ac_re  !  *remove*
+  < 
+  35c33
+  <         REAL                         :: vp, vp2, k, k2, kd, kd2, a, b, eta
+  ---
+  >         REAL                         :: vp, vp2, zp2, k, k2, kd, kd2, a, b, eta
+  59,61d56
+  [ ... comments ... ]
+  82a80
+  >         zp2 = zp**2                 ! [dimensionless]
+  97c95
+  <            c1=2*BEKEV*kb2(ib)*A0CM   ! [keV/cm]
+  ---
+  >            c1=2*zp2*BEKEV*kb2(ib)*A0CM ! [keV/cm]
+  120,121c118,119
+  <               ac_e=ac_e + ac_s + ac_r
+  <               aq_e=aq_e + aq_e + aq
+  ---
+  >               ac_e=ac_s + ac_r
+  >               aq_e=aq
+  134a133,134
+  > 
+  > 
+  327c327
+  <         REAL    :: c1                        ! [keV/cm]
+  ---
+  >         REAL    :: c1, zp2                   ! [keV/cm]
+  338a339
+  >         zp2 = zp**2                 ! [dimensionless]
+  346c347
+  <         c1=2*BEKEV*kb2(ib)*A0CM     ! [keV/cm]
+  ---
+  >         c1=2*zp2*BEKEV*kb2(ib)*A0CM ! [keV/cm]
+  400c401
+  <         REAL    :: a                         ! [dimensionless]
+  ---
+  >         REAL    :: a, zp2                    ! [dimensionless]
+  418a420
+  >         zp2 = zp**2                 ! [dimensionless]
+  423c425
+  <         c1=2*BEKEV*kb2(ib)*A0CM     ! [keV/cm]
+  ---
+  >         c1=2*zp2*BEKEV*kb2(ib)*A0CM ! [keV/cm]
+  451c453
+  <               cs  =2*BEKEV*A0CM*omi2/vp2           ! [keV/cm]
+  ---
+  >               cs  =2*zp2*BEKEV*A0CM*omi2/vp2       ! [keV/cm]
+
+
+* 24-Oct-2009: coulombLog_1.10_fix
+  --------------------------------
+  Parameter declaration problem in dedx.f90 for:
+  1. DWB and DWA in daw()
+  2. J4B and J4A in j4()
+  3. J3B and J3A in j3()
+  4. J2B and J3A in j2()
+  5. J1B and J1A in j1()
+
+  Reformatted several parameters statements in dedx.f90 for functions
+  j1(), j2(), j3(), j4(), and daw(). The old formatting was producing
+  a bug in that v1.10 and v1.09 differed in the second or third significant
+  figure for acoeff.f90/a_reg. 
+
+  % cvs commit dedx.f90
+
+* 25-Oct-2009
+  Summary of the fix.
+
+  1. To see the make errors, return to v10:
+  [bobs@jj180 coulombLog_1.10]$ make
+  gfortran -g -fdefault-real-8 -c ferf.f
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c vars.f90
+  [ ... ]
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c dedx.f90
+  dedx.f90: In function ‘daw’:
+  dedx.f90:1250: warning: ‘dwa’ may be used uninitialized in this function
+  dedx.f90:1251: warning: ‘dwb’ may be used uninitialized in this function
+  dedx.f90: In function ‘j2’:
+  dedx.f90:954: warning: ‘j2a’ may be used uninitialized in this function
+  dedx.f90:955: warning: ‘j2b’ may be used uninitialized in this function
+  dedx.f90: In function ‘j1’:
+  dedx.f90:872: warning: ‘j1a’ may be used uninitialized in this function
+  dedx.f90:873: warning: ‘j1b’ may be used uninitialized in this function
+  dedx.f90: In function ‘j4’:
+  dedx.f90:1113: warning: ‘j4a’ may be used uninitialized in this function
+  dedx.f90:1114: warning: ‘j4b’ may be used uninitialized in this function
+  dedx.f90: In function ‘j3’:
+  dedx.f90:1033: warning: ‘j3a’ may be used uninitialized in this function
+  dedx.f90:1034: warning: ‘j3b’ may be used uninitialized in this function
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c grFix.f90
+  gfortran ferf.o vars.o mathvars.o physvars.o rate.o esplit.o acoeff.o dedx.o grFix.o     -o clog
+
+  2. The parameter declarations in daw, j1, j2, j3, j4 were changed. For example,
+  in daw():
+  ----
+  From
+  ----
+   ! daw() approximates Dawson's integral by rational
+   ! functions with coefficients:
+   !
+     INTEGER, PARAMETER          :: NNDAW=3, NMDAW=2*NNDAW-1 ! NMDAW=5
+     REAL,    DIMENSION(0:NMDAW) :: DWB, DWA
+     PARAMETER (            &
+     DWB=(/                 &
+       5.73593880244318E0,  & !b0
+      -6.73666007137766E0,  & !b1
+       1.99794422787154E1,  & !b2
+      -1.85506350260761E1,  & !b3
+       1.22651360905700E1,  & !b4
+      -4.67285812684807E0/),& !b5
+     DWA=(/                 &
+       DWB(0),              & !a0
+      -6.82372048950896E0,  & !a1
+       1.33804115903096E1,  & !a2
+      -1.42130723670491E1,  & !a3
+       1.11714434417979E1,  & !a4
+      -4.66303387468937E0/) ) !a5
+  --
+  To
+  --
+   !
+   ! daw() approximates Dawson's integral by rational
+   ! functions with coefficients:
+   !
+      INTEGER, PARAMETER          :: NNDAW=3, NMDAW=2*NNDAW-1 ! NMDAW=5
+      REAL,    PARAMETER, DIMENSION(0:NMDAW) :: DWB=(/ &
+      5.73593880244318E0 ,  & !b0
+      -6.73666007137766E0,  & !b1
+      1.99794422787154E1 ,  & !b2
+      -1.85506350260761E1,  & !b3
+      1.22651360905700E1 ,  & !b4
+      -4.67285812684807E0/)   !b5
+      REAL,    PARAMETER, DIMENSION(0:NMDAW) :: DWA=(/ &
+      5.73593880244318E0 ,  & !a0=b0
+      -6.82372048950896E0,  & !a1
+      1.33804115903096E1 ,  & !a2
+      -1.42130723670491E1,  & !a3
+      1.11714434417979E1 ,  & !a4
+      -4.66303387468937E0/)   !a5
+
+   And similarly for j1(), j2(), j3(), and j4().
+
+
+* 25-Oct-2009: coulombLog_1.11
+  ----------------------------
+  Created subroutine a_collect to form a_tot, a_e, a_i, etc. from ac_s, 
+  ac_r, and aq:
+  CALL a_collect(ib,nnb,ac_s,ac_r,aq,a_tot,a_e, a_i,ac_tot,ac_e,ac_i,
+  aq_tot,aq_e,aq_i)
+
+  Placed subroutine a_asymptotic_small_E into coeff_bps_small_E
+  Placed subroutine  a_asymptotic_high_E  into coeff_bps_high_E
+
+  % cvs commit
+    [...]
+    Checking in acoeff.f90;
+    /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+    new revision: 1.27; previous revision: 1.26
+    done
+    Checking in changelog.txt;
+    /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+    new revision: 1.50; previous revision: 1.49
+    done
+
+* 26-Oct-2009
+  Update test.f90 to reflect new changes in acoeff.f90, dedx.f90, and physvars.f90.
+  I have already made minor changes in test.f90 (in coulombLog_1.08_works I removed 
+  two extraneous arguments e0 and ec):
+
+  [bobs@jj180 coulombLog_1.11]$ diff test.f90 ../coulombLog_1.00/test.f90
+  58c58
+  <          CALL data_generate(nni,ep,zp,mp,betab,zb,mb,nb)
+  ---
+  >          CALL data_generate(nni,ep,zp,mp,betab,zb,mb,nb,e0,ec)
+  77c77
+  <     SUBROUTINE data_generate(nni, ep, zp, mp, betab, zb, mb, nb)
+  ---
+  >     SUBROUTINE data_generate(nni, ep, zp, mp, betab, zb, mb, nb, e0, ec)
+  88a89,90
+  >       REAL,                        INTENT(IN)  :: e0    !  Threshold production energy [keV]
+  >       REAL,                        INTENT(IN)  :: ec    !  Crossing energy where A_i=A_c [keV]
+  98a101
+  >       REAL :: fe, fi
+  206c209
+  <       REAL         :: te_dat, ti_dat, mp_dat, ep_dat, zp_dat
+  ---
+  >       REAL         :: te_dat, ti_dat, ne_dat, mp_dat, ep_dat, zp_dat
+  480c483
+  <          a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+  ---
+  >          a_tot, a_i, a_e, ac_tot, ac_i, aq_tot, aq_i)
+
+
+* 26-Oct-2009
+  Update test.f90 to reflect new changes in acoeff.f90, dedx.f90, and physvars.f90.
+  See 4th entry from 20-Oct-2009.
+
+  Rename the old version and make a new version:
+  test_old.f90: old test code with no changes (same as previous test.f90)
+  test_new.f90: new test code with updates.
+
+  First run the old test code:
+  % test_old
+    calling test_plasma ...                      
+      passed.                                     
+    calling: test_param ...                      
+      passed.                                     
+    calling: test_dedx_bps ...                   
+    ERROR: dedxtot                               
+      44.035174406790944                         
+      43.979393035466998                         
+      6.33774305151711226E-004                    
+    ERROR: dedxsumi                              
+      4.5468218845472119                         
+      4.5096072267442002                         
+      4.10919771420868891E-003                    
+    ERROR: dedxsumi                              
+      39.488352522243730                         
+      39.469785808723003                         
+      2.35146292873588379E-004                    
+    ERROR: dedxctot                              
+      59.063002244645311                         
+      59.007220873321998                         
+      4.72442330083346399E-004                    
+    ERROR: dedxcsumi                             
+      4.7024812223316337                         
+      4.6652665645285998                         
+      3.97263660911467090E-003                    
+    passed.                                     
+    calling: test_coeff_bps ...                  
+    ERROR: a_tot                                 
+      4.20556816267871753E-002                    
+      4573.6176395409002                         
+      0.99998160961486893                         
+    ERROR: a_i                                   
+      2.86960161413426324E-003
+      3932.7030074546001
+      0.99999854064773530
+    ERROR: a_e
+      3.91860800126529116E-002
+      640.91463208630000
+      0.99987772573030376
+    ERROR: ac_tot
+      5.71174444081415725E-002
+      4588.7155878035001
+      0.99997510556827418
+    ERROR: ac_i
+      3.02535853734350619E-003
+      3932.8589353840998
+      0.99999846149772476
+    ERROR: aq_tot
+      -1.50617627813543955E-002
+      -15.097948262544000
+      0.99800678187123348
+    ERROR: aq_i
+      -1.55756923209242890E-004
+      -0.15592792942202000
+      0.99800418702484084
+      passed.
+    calling: test_bps_rate ...
+      passed.
+
+  There are two problems: i) dedx is off in the second--fourth decimal 
+  place because I am now using more accurate parameters in physvars.f90,
+  and ii) acoeff is off orders of magnitude because I was not consistent
+  in its units (keV/micron vs. MeV/micron).
+
+   test_new1.f90: Rescale the acoeff data in test.dat:
+   SUBROUTINE test_coeff_bps(nni,ep,zp,mp,betab,zb,mb,nb)
+   [...]
+   [... read data from test.dat ...]
+   !*!
+   ! convert data from keV/micron to MeV/micron
+      a_tot_dat =a_tot_dat/1.E5
+      a_i_dat   =a_i_dat/1.E5
+      a_e_dat   =a_e_dat/1.E5
+      ac_tot_dat=ac_tot_dat/1.E5
+      ac_i_dat  =ac_i_dat/1.E5
+      aq_tot_dat=aq_tot_dat/1.E3
+      aq_i_dat  =aq_i_dat/1.E3
+   !*!
+   [... do the tests ...]
+   END SUBROUTINE test_coeff_bps
+
+   Note that the quantum pieces are scaled by 10^3 and the others by 10^5. Don't
+   really understand this. 
+
+  % test_new1
+    calling test_plasma ...                                                             
+      passed.                                                                            
+    calling: test_param ...                                                             
+      passed.                                                                            
+    calling: test_dedx_bps ...  
+    [ ... same as above ... ]                                                        
+    calling: test_coeff_bps ...                                                         
+    ERROR: a_tot                                                                        
+      4.20556816267871753E-002                                                           
+      4.57361763954090075E-002                                                           
+      4.19229624652812452E-002                                                           
+    ERROR: a_i                                                                          
+      2.86960161413426324E-003
+      3.93270300745460072E-002
+      0.86398906740681547
+    ERROR: a_e
+      3.91860800126529116E-002
+      6.40914632086300035E-003
+      0.71886766066333585
+    ERROR: ac_tot
+      5.71174444081415725E-002
+      4.58871558780350047E-002
+      0.10902705800425978
+    ERROR: ac_i
+      3.02535853734350619E-003
+      3.93285893538410022E-002
+      0.85713924259829388
+    ERROR: aq_tot
+      -1.50617627813543955E-002
+      -1.50979482625440004E-002
+      1.19979535403823235E-003
+    ERROR: aq_i
+      -1.55756923209242890E-004
+      -1.55927929422019991E-004
+      5.48651021483578089E-004
+      passed.
+    calling: test_bps_rate ...
+      passed.
+
+  I am now reasonably sure that there are no serious problem
+  in test.f90. I will use the old version to re-create test.dat
+  and then submit to repository with cvs. Do this in new version.
+
+
+* 26-Oct-2009: coulombLog_1.12
+  ----------------------------
+  Added a few improvements to test.f90, e.g. test.dat will now
+  include ac_e and ac_i in the acoeff data section.
+
+  Generate new data test.f90 (set write_dat=.TRUE. in test.f90)
+  [bobs@jj180 coulombLog_1.12]$ more test.dat
+  plasma: DT alpha
+           2
+     0.10000000000000D+02     0.10000000000000D+02
+     0.10000000000000D+26     0.50000000000000D+25     0.50000000000000D+25
+     0.51099890200000D+03     0.18765439960000D+07     0.28148159940000D+07
+    -0.10000000000000D+01     0.10000000000000D+01     0.10000000000000D+01
+     0.20000000000000D+01     0.37530879920000D+07
+     0.35400000000000D+04
+  subroutine check: param
+     0.61260000000000D-03     0.43317361415488D-03     0.43317361415488D-03
+     0.61260000000000D-03     0.43317361415488D-03
+     0.52165248509904D-01     0.16557369600876D-02
+  subroutine check: dedx_bps
+     0.44035174406791D+02     0.45468218845472D+01     0.39488352522244D+02
+     0.59063002244645D+02     0.47024812223316D+01
+    -0.15027827837854D+02    -0.15565933778442D+00
+  subroutine check: coeff_bps [MeV/micron]
+     0.42055681626787D-01     0.28696016141343D-02     0.39186080012653D-01
+     0.57117444408142D-01     0.30253585373435D-02     0.54092085870798D-01
+    -0.15061762781354D-01    -0.15575692320924D-03    -0.14906005858145D-01
+  subroutine check: bps_rate
+     0.46954969358347D+01     0.16263009165916D-10
+     0.71297134262233D+01     0.10710515997059D-10
+
+  Testing mode: (set write_dat=.FALSE. in test.f90)
+  [bobs@jj180 coulombLog_1.12]$ clog
+   calling test_plasma ...
+    passed.
+   calling: test_param ...
+    passed.
+   calling: test_dedx_bps ...
+    passed.
+   calling: test_coeff_bps ...
+    passed.
+
+  % cvs update
+    [...]
+    Updated and improved test.f90 and test.dat.
+
+    There were two problems: i) dedx was off in the second--fourth decimal 
+    place because I am now using more accurate parameters in physvars.f90,
+    and ii) acoeff was off orders of magnitude because I was not consistent
+    in its units (keV/micron vs. MeV/micron).
+
+    CVS: -----------------------------------------------------------------
+    CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+    CVS: 
+    CVS: Committing in .
+    CVS: 
+    CVS: Modified Files:
+    CVS: 	changelog.txt makefile test.dat test.f90 
+    CVS: -----------------------------------------------------------------
+    [...]
+    Checking in changelog.txt;
+    /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+    new revision: 1.51; previous revision: 1.50
+    done
+    Checking in makefile;
+    /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+    new revision: 1.40; previous revision: 1.39
+    done
+    Checking in test.dat;
+    /home/bobs1/physics/REPO/coulombLog/test.dat,v  <--  test.dat
+    new revision: 1.6; previous revision: 1.5
+    done
+    Checking in test.f90;
+    /home/bobs1/physics/REPO/coulombLog/test.f90,v  <--  test.f90
+    new revision: 1.11; previous revision: 1.10
+    done
+
+* 28-Oct-2009
+  The regular contribution ac_r_lim in coeff_bps_high_E for high
+  energies was missing a factor of zp. I have now simplified the 
+  expression:
+  ----
+  From
+  ----
+  omi2=OMEGI2*zb(ib)*zb(ib)*nb(ib)*AMUKEV/mb(ib) ! [1/s^2]
+  ac_r_lim=-zp*BEKEV*A0CM*omi2/vp2               ! [keV/cm] <== should  be zp2
+  ac_r_lim=ac_r_lim*1.E-7                        ! [MeV/micron]
+  --
+  To
+  --
+  ac_r_lim=-0.25*c1/ab(ib)                       ! [MeV/micron]
+
+  Note: The constant c1 contains the factor 1.E-7.
+
+* 28-Oct-2009
+  While the singular contribution ac_s_lim in coeff_bps_high_E is
+  correct, it can be simplified in a similar manner to ac_r_lim:
+  ----
+  From
+  ----
+  omi2=OMEGI2*zb(ib)*zb(ib)*nb(ib)*AMUKEV/mb(ib) ! [1/s^2]
+  cs  =2*zp2*BEKEV*A0CM*omi2/vp2       ! [keV/cm]
+  cs  =cs*1.E-7                        ! [MeV/micron]
+  --
+  To
+  --
+  cs=0.5*c1/ab(ib)
+
+  We then construct ac_s_lim in the same way:
+
+  ac_s_lim=(LOG(ABS(zp*zb(ib))*BEKEV*& ! [dimensionless]
+  k*A0CM*CC2/(mpb(ib)*vp2)) + GAMMA)   !
+  ac_s_lim=-cs*ac_s_lim                ! [MeV/micron]
+
+  Note: This produced a small change in the 4th significant figure 
+  of ac_i_lim:
+  ----
+  From
+  ----
+#  iu  ep[keV]     a_tot       a_i         ac_tot      ac_i        
+    0  0.1000E-06 -0.6748E+07 -0.6748E+07 -0.1077E+09  0.1077E+09  
+    1  0.5000E+01  0.1407E+01  0.1405E+01  0.9262E+00  0.9247E+00  
+    2  0.1000E+02  0.7349E+00  0.7328E+00  0.5247E+00  0.5226E+00  
+    3  0.1500E+02  0.5029E+00  0.5003E+00  0.3745E+00  0.3718E+00  
+    4  0.2000E+02  0.3845E+00  0.3814E+00  0.2944E+00  0.2914E+00  
+    5  0.2500E+02  0.3124E+00  0.3090E+00  0.2443E+00  0.2409E+00  
+    6  0.3000E+02  0.2639E+00  0.2602E+00  0.2097E+00  0.2060E+00  
+    7  0.3500E+02  0.2289E+00  0.2249E+00  0.1844E+00  0.1804E+00  
+    8  0.4000E+02  0.2025E+00  0.1982E+00  0.1650E+00  0.1607E+00  
+    9  0.4500E+02  0.1819E+00  0.1774E+00  0.1497E+00  0.1452E+00  
+   10  0.5000E+02  0.1653E+00  0.1605E+00  0.1373E+00  0.1325E+00  
+  --
+  To
+  --
+#  iu  ep[keV]     a_tot       a_i         ac_tot      ac_i        
+    0  0.1000E-06 -0.6715E+07  0.6715E+07 -0.1077E+09  0.1077E+09  
+    1  0.5000E+01  0.1407E+01  0.1405E+01  0.9259E+00  0.9244E+00  
+    2  0.1000E+02  0.7347E+00  0.7326E+00  0.5245E+00  0.5224E+00  
+    3  0.1500E+02  0.5028E+00  0.5001E+00  0.3743E+00  0.3717E+00  
+    4  0.2000E+02  0.3844E+00  0.3813E+00  0.2943E+00  0.2913E+00  
+    5  0.2500E+02  0.3123E+00  0.3089E+00  0.2442E+00  0.2408E+00  
+    6  0.3000E+02  0.2638E+00  0.2601E+00  0.2096E+00  0.2059E+00  
+    7  0.3500E+02  0.2289E+00  0.2249E+00  0.1843E+00  0.1803E+00  
+    8  0.4000E+02  0.2025E+00  0.1982E+00  0.1650E+00  0.1607E+00  
+    9  0.4500E+02  0.1819E+00  0.1773E+00  0.1497E+00  0.1451E+00  
+   10  0.5000E+02  0.1653E+00  0.1605E+00  0.1372E+00  0.1324E+00  
+
+  % cvs commit
+  [cvs log]
+  Fixed bug in ac_r_lim for high energy (missing factor of zp). 
+  Simplified both ac_r_lim and ac_s_lim. This affected the 3rd
+  or 4th significant figure of ac_i_lim. 
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Modified Files:
+  CVS: 	acoeff.f90 changelog.txt main.f90 makefile 
+  CVS: ----------------------------------------------------------------------
+
+  Checking in acoeff.f90;
+  /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+  new revision: 1.28; previous revision: 1.27
+  done
+  Checking in changelog.txt;
+  /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+  new revision: 1.52; previous revision: 1.51
+  done
+  Checking in main.f90;
+  /home/bobs1/physics/REPO/coulombLog/main.f90,v  <--  main.f90
+  new revision: 1.14; previous revision: 1.13
+  done
+  Checking in makefile;
+  /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+  new revision: 1.41; previous revision: 1.40
+  done
+
+* 01-Nov-2009
+  Add coulomLog/doc/A_asymptotic_doc.tar to cvs
+  % cd coulomLog/doc
+  % cvs add A_asymptotic_doc.tar
+    cvs add: scheduling file `A_asymptotic_doc.tar' for addition
+    cvs add: use 'cvs commit' to add this file permanently
+  % cvs commit
+  [... log file ...]
+
+  Documentation for the A-coefficients and their asymptotic limits . 
+
+  Upon un-taring the A_asymptotic_doc.tar, a directory A_asymptotic_doc/ 
+  will be created, containing the TeX source A_assymtotic_notes1.6.tex 
+  and all figure files.
+
+  The figures are of the form grXXX.eps (there are a lot of them), and
+  they were created by grXXX.sm and grXXX.dat. The drivers grXXX.f90 for 
+  making the data files grXXX.dat are included. 
+
+  CVS: ----------------------------------------------------------------------
+  CVS: Enter Log.  Lines beginning with `CVS:' are removed automatically
+  CVS: 
+  CVS: Committing in .
+  CVS: 
+  CVS: Added Files:
+  CVS: 	A_asymptotic_doc.tar 
+  CVS: ----------------------------------------------------------------------
+  cvs commit: Examining .
+  RCS file: /home/bobs1/physics/REPO/coulombLog/doc/A_asymptotic_doc.tar,v
+  done
+  Checking in A_asymptotic_doc.tar;
+  /home/bobs1/physics/REPO/coulombLog/doc/A_asymptotic_doc.tar,v  <--  A_asymptotic_doc.tar
+  initial revision: 1.1
+  done
+
+
+* 01-Nov-2009
+  Added a new source file common.f90. I will slowly migrate common
+  subroutines to this source file. 
+  % cvs add common.f90
+  % cvs commit
+
+
+* 01-Nov-2009
+   main_acoeff_dedx.f90:
+#
+#  iu  ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+    0  0.1000E+01  0.1465E+00 -0.8826E-02  0.1554E+00  0.1425E+00 -0.1243E-01  0.1549E+00  0.4059E-02  0.3600E-02  0.4592E-03
+    0  0.1000E+01 -0.7334E+00 -0.8767E-02 -0.7247E+00 -0.7375E+00 -0.1236E-01 -0.7251E+00  0.4051E-02  0.3591E-02  0.4594E-03
+    0  0.1000E+01  0.1200E+03  0.6726E+00  0.1214E+03  0.1193E+03  0.5429E+00  0.1214E+03  0.1955E+00  0.2262E+00  0.4489E-01
+#
+#  iu  ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+    0  0.5000E+04  0.4976E-01  0.4647E-01  0.3292E-02  0.6743E-01  0.6401E-01  0.3426E-02 -0.1767E-01 -0.1753E-01 -0.1345E-03
+    0  0.5000E+04  0.4811E-01  0.4604E-01  0.2075E-02  0.6574E-01  0.6353E-01  0.2209E-02 -0.1763E-01 -0.1749E-01 -0.1343E-03
+    0  0.5000E+04  0.3427E+01  0.9392E+00  0.5863E+02  0.2573E+01  0.7472E+00  0.5507E+02  0.2410E+00  0.2418E+00  0.1377E+00
+
+
+* 04-Nov-2009
+  Bug in dedx.f90 for classical contribution.
+
+  Found a peculiar bug. In dedx.f90 I changed the integrand in the classical 
+  piece for dedxc. Recall that the integral I_1(a,b,c) was performed 
+  "analytically" in terms of four functions j1(x) ... j4(x) [see the notes 
+  in coulombLog/doc/dedxFortran.bps2.2.tex -- Eqs. (2.32), (7.1), (7.2) 
+  and (7.12)], and this was coded in intone():
+
+  FUNCTION intone(a, b, c) 
+    USE globalvars
+    IMPLICIT NONE
+    REAL, INTENT(IN) :: a, b, c
+    REAL             :: intone
+    REAL    :: bc, a2, a3, erfa, expa, ferf
+    REAL    :: j1, j2, j3, j4
+    bc=b*c
+    a2=a*a
+    a3=a2*a
+    erfa=SQPI*ferf(a)  ! see ferf.f
+    expa=EXP(-a2)
+    intone=erfa*((2-c)/a + bc/(2*a3))-bc*expa/a2
+    intone=intone + j3(a2) - j1(a2) + b*(j2(a2) -j4(a2))
+  END FUNCTION intone
+
+  This form is in version 3.14, the last version before I placed the
+  code under cvs control. For some reason, it currently reads:
+
+  FUNCTION intone(a, b, c) 
+    USE bpsvars
+    USE mathvars
+    IMPLICIT NONE
+    REAL, INTENT(IN) :: a, b, c
+    REAL             :: intone
+    REAL    :: a2, erfa, expa, ferf
+    REAL    :: j2, j4
+    a2=a*a
+    erfa=SQPI*ferf(a)  ! see ferf.f
+    expa=EXP(-a2)
+    intone=b*c*(0.5*erfa/a - expa)/a2
+    intone=intone + b*(j2(a2) -j4(a2))
+  END FUNCTION intone
+
+  I have now changed it back:
+
+   FUNCTION intone(a, b, c) 
+     USE bpsvars
+     USE mathvars
+     IMPLICIT NONE
+     REAL, INTENT(IN) :: a, b, c
+     REAL             :: intone
+     REAL    :: a2, a3, bc, erfa, expa, ferf
+     REAL    :: j2, j4, j1, j3
+     bc=b*c
+     a2=a*a ! A_b
+     a3=a2*a
+     erfa=SQPI*ferf(a)  ! see ferf.f
+     expa=EXP(-a2)
+     intone=erfa*((2-c)/a + bc/(2*a3))-bc*expa/a2
+     intone=intone + j3(a2) - j1(a2) + b*(j2(a2) -j4(a2))
+     !
+     ! why did I change this?
+     !
+     !   a2=a*a
+     !   erfa=SQPI*ferf(a)  ! see ferf.f
+     !   expa=EXP(-a2)
+     !   intone=b*c*(0.5*erfa/a - expa)/a2
+     !   intone=intone + b*(j2(a2) -j4(a2))
+   END FUNCTION intone
+
+   The test run now reads [units of dE/dx are MeV/keV]:
+
+   calling test_plasma ...
+    passed.
+   calling: test_param ...
+    passed.
+   calling: test_dedx_bps ...
+   ERROR: dedxtot
+   42.0160303645615
+   44.0351744067910
+   2.346444826187601E-002
+   ERROR: dedxsumi
+   2.76601849833869
+   4.54682188454720
+   0.243517332933465
+   ERROR: dedxsumi
+   39.2500118662228
+   39.4883525222440
+   3.026995263011808E-003
+   ERROR: dedxctot
+   57.0438582024159
+   59.0630022446450
+   1.739039393929493E-002
+   ERROR: dedxcsumi
+   2.92167783612311
+   4.70248122233160
+   0.233573745321288
+   calling: test_coeff_bps ...
+    passed.
+
+   % cvs commit
+   [... cvs log ...]
+   cvs commit: Examining doc
+   [...]
+   Checking in common.f90;
+   /home/bobs1/physics/REPO/coulombLog/common.f90,v  <--  common.f90
+   new revision: 1.2; previous revision: 1.1
+   done
+   Checking in dedx.f90;
+   /home/bobs1/physics/REPO/coulombLog/dedx.f90,v  <--  dedx.f90
+   new revision: 1.12; previous revision: 1.11
+   done
+   [...]
+
+
+* 06-Nov-2009
+  The variable nni has been declared global in vars.f90/allocatablevars and
+  it is being passed as an argument in subroutines. This sounds like trouble.
+
+  1. Rename global variable "nni" to ni within module declaration
+
+     vars.f90:
+     [...]  
+     MODULE allocatablevars
+       INTEGER :: ni  ! number of ion species
+       REAL,    DIMENSION(:), ALLOCATABLE :: betab, zb, mb, nb
+       REAL,    DIMENSION(:), ALLOCATABLE :: gb, etab, mpb, mbpb
+     END MODULE allocatablevars
+
+  2. The subroutine define_plasma is called (and defined) in the main 
+     driver. An extra argument nni has been added to subroutine define_plasma, 
+     and nni is set to glabal value ni:
+
+     SUBROUTINE define_plasma(te,ti,ne,nni)
+     USE allocatablevars 
+     [...]
+     ni=2   
+     nni=ni ! number of ion species
+     ALLOCATE(betab(1:nni+1),zb(1:nni+1),mb(nni+1),nb(1:nni+1)) 
+     [...]
+
+  3. It should now be safe to pass nni as an argument, and the subroutine
+     define_plasma() is now called as follows:
+
+     CALL define_plasma(te,ti,ne,nni)
+
+* 10-Nov-2009
+  1. New dedx_bps code [regular contribution taken from old code + unit conversions]
+     Agrees with old code to 0.1%.
+  2. Calculating dE/dx from the A-coefficients agrees with dedx_bps code.
+#      ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+old:   0.1000E+01 -0.7356E+00 -0.8826E-02 -0.7268E+00 -0.7397E+00 -0.1243E-01 -0.7273E+00  0.4059E-02  0.3600E-02  0.4592E-03 
+new:   0.1000E+01 -0.7333E+00 -0.8792E-02 -0.7245E+00 -0.7373E+00 -0.1238E-01 -0.7249E+00  0.4050E-02  0.3590E-02  0.4592E-03
+A's:   0.1000E+01 -0.7334E+00 -0.8767E-02 -0.7247E+00 -0.7375E+00 -0.1236E-01 -0.7251E+00  0.4051E-02  0.3591E-02  0.4594E-03
+%  :   0.1000E+01  0.2238E-01  0.2819E+00  0.2606E-01  0.2244E-01  0.1903E+00  0.2606E-01  0.3321E-01  0.3353E-01  0.3077E-01
+
+* 10-Nov-2009
+  % cvs commit
+  [...]
+  /home/bobs1/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+  new revision: 1.57; previous revision: 1.56
+  done
+  Checking in common.f90;
+  /home/bobs1/physics/REPO/coulombLog/common.f90,v  <--  common.f90
+  new revision: 1.3; previous revision: 1.2
+  done
+  Checking in dedx.f90;
+  /home/bobs1/physics/REPO/coulombLog/dedx.f90,v  <--  dedx.f90
+  new revision: 1.13; previous revision: 1.12
+  done
+  Checking in makefile;
+  /home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+  new revision: 1.45; previous revision: 1.44
+  done
+  Checking in physvars.f90;
+  /home/bobs1/physics/REPO/coulombLog/physvars.f90,v  <--  physvars.f90
+  new revision: 1.8; previous revision: 1.7
+  done
+  Checking in vars.f90;
+  /home/bobs1/physics/REPO/coulombLog/vars.f90,v  <--  vars.f90
+  new revision: 1.5; previous revision: 1.4
+  done
+
+* 11-Nov-2009
+  test1.f90 and test1.dat: uses dedx_bps [old version]
+  test2.f90 and test2.dat: uses dedx_bps_new
+
+  test1.dat:
+  plasma: DT alpha
+           2
+     0.10000000000000D+02     0.10000000000000D+02
+     0.10000000000000D+26     0.50000000000000D+25     0.50000000000000D+25
+     0.51099890200000D+03     0.18765439960000D+07     0.28148159940000D+07
+    -0.10000000000000D+01     0.10000000000000D+01     0.10000000000000D+01
+     0.20000000000000D+01     0.37530879920000D+07
+     0.35400000000000D+04
+  subroutine check: param
+     0.61260000000000D-03     0.43317361415488D-03     0.43317361415488D-03
+     0.61260000000000D-03     0.43317361415488D-03
+     0.52165248509904D-01     0.16557369600876D-02
+  subroutine check: dedx_bps [MeV/micron]
+     0.42016030364562D-01     0.27660184983387D-02     0.39250011866223D-01
+     0.57043858202416D-01     0.29216778361231D-02
+    -0.15027827837854D-01    -0.15565933778442D-03
+  subroutine check: coeff_bps [MeV/micron]
+     0.42055681626787D-01     0.28696016141343D-02     0.39186080012653D-01
+     0.57117444408142D-01     0.30253585373435D-02     0.54092085870798D-01
+    -0.15061762781354D-01    -0.15575692320924D-03    -0.14906005858145D-01
+  subroutine check: bps_rate
+     0.46954969358347D+01     0.16263009165916D-10
+     0.71297134262233D+01     0.10710515997059D-10
+
+  test2.dat:
+  plasma: DT alpha
+           2
+     0.10000000000000D+02     0.10000000000000D+02
+     0.10000000000000D+26     0.50000000000000D+25     0.50000000000000D+25
+     0.51099890200000D+03     0.18765439960000D+07     0.28148159940000D+07
+    -0.10000000000000D+01     0.10000000000000D+01     0.10000000000000D+01
+     0.20000000000000D+01     0.37530879920000D+07
+     0.35400000000000D+04
+  subroutine check: param
+     0.61260000000000D-03     0.43317361415488D-03     0.43317361415488D-03
+     0.61260000000000D-03     0.43317361415488D-03
+     0.52165248509904D-01     0.16557369600876D-02
+  subroutine check: dedx_bps [MeV/micron]
+     0.41838194413153D-01     0.27553105300380D-02     0.39082883883115D-01
+     0.56832559770516D-01     0.29107490155490D-02     0.53921810754967D-01
+    -0.14994365357364D-01    -0.15543848551099D-03    -0.14838926871853D-01
+  subroutine check: coeff_bps [MeV/micron]
+     0.42055681626787D-01     0.28696016141343D-02     0.39186080012653D-01
+     0.57117444408142D-01     0.30253585373435D-02     0.54092085870798D-01
+    -0.15061762781354D-01    -0.15575692320924D-03    -0.14906005858145D-01
+  subroutine check: bps_rate
+     0.46954969358347D+01     0.16263009165916D-10
+     0.71297134262233D+01     0.10710515997059D-10
+
+* 11-Nov-2009: coulombLog_1.13
+  Time to cleanup and reorganize.
+
+  Save the old dedx.f90 in cvs repository [for reproducing old results]:
+  % cp dedx.f90 dedx.old.f90
+  % cvs add dedx.old.f90
+  % cvs commit
+
+  See 20-Oct-2009 item 2 for a complete code inventory:
+
+  ------------------------
+  physvars.f90: <== CONVFACT now converts to Mev/micron. 
+  mathvars.f90:
+  vars.f90    :
+
+  acoeff.f90  : 2009-10-30
+  common.f90  : 2009-11-10
+  dedx.old.f90: 2009-11-10
+  ------------------------
+
+  acoeff.f90
+  % grep SUBROUTINE acoeff.f90 | grep -v END
+      SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+      SUBROUTINE a_collect(ib, ibmax, ac_s, ac_r, aq, a_tot, a_e, a_i, &
+      SUBROUTINE a_sing(a, b, ac_s)
+      SUBROUTINE a_reg(ib, nni, vp, k2, kb2, betab, mb, ac_r)
+      SUBROUTINE a_quantum(ib, a, eta, aq)
+      SUBROUTINE coeff_bps_small_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+      SUBROUTINE coeff_bps_high_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+  % grep FUNCTION acoeff.f90 | grep -v END
+      FUNCTION dab_sing(u, a, b)
+      FUNCTION dab_reg(u, vp, ib, nni, k2, kb2, betab, mb)
+      FUNCTION daq(u, a, eta)
+
+  common.f90
+  % grep SUBROUTINE common.f90 | grep -v END
+      SUBROUTINE dedx_bps_new(nni, ep, zp, mp, betab, zb, mb, nb,  &
+      SUBROUTINE dedx_quantum(a, e, mt, mr, dedxq)
+      SUBROUTINE dedx_sing(a, b, c, dedxc_s)  ! I_1(a,b,c)
+      SUBROUTINE dedx_sing2(a, b, c, dedxc_s) ! I_1(a,b,c) via Gaussian quadrature.
+      SUBROUTINE dedx_reg1(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE dedx_reg2(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE hi_new(nni, ib, kk, kkb2, abv, hii)
+      SUBROUTINE fri_new(nni, xb, kb2, fr, fi, fabs, farg)
+  % grep FUNCTION common.f90 | grep -v END
+      FUNCTION d_dedxq_new(a, e, mt, mr, u)
+      FUNCTION d_dedxc_s2(a, b, c, u)
+
+  dedx.old.f90
+  % grep SUBROUTINE dedx.old.f90 | grep -v END
+      SUBROUTINE dedx_bps(nni, ep, zp, mp, betab, zb, mb, nbb, dedxtot, &
+      SUBROUTINE dedxq(vp, dedxqtot, dedxqsumi)
+      SUBROUTINE dedxc(vp, dedxctot, dedxcsumi)
+      SUBROUTINE fri(xb, fr, fi, fabs, farg)
+      SUBROUTINE param(nni, betab, nb, gb, ge, gi, etae, ze)
+      SUBROUTINE n_tg(t, g, n)
+      SUBROUTINE n_tze(t, ze, n)
+      SUBROUTINE frfi_p(x, alpha, fr, fi, fabs, farg)
+      SUBROUTINE frfi_one(x, fr, fi, fabs, farg)
+  % grep FUNCTION dedx.old.f90 | grep -v END
+      FUNCTION dedxqi(v, a, e, rm, rr)
+      FUNCTION d_dedxq(r, s, rm, rr, x)
+      FUNCTION repsi(x)
+      FUNCTION repsi1(x)
+      FUNCTION repsi2(x)
+      FUNCTION kqm1(x)
+      FUNCTION kqm3(x)
+      FUNCTION intone(a, b, c)
+      FUNCTION inttwo(ib, abv)
+      FUNCTION hi(ib, abv)
+      FUNCTION j1(x)
+      FUNCTION j2(x)
+      FUNCTION j3(x)
+      FUNCTION j4(x)
+      FUNCTION daw(x)
+
+* 11-Nov-2009: coulombLog_1.13
+  test2.f90 and test2.dat ==> test.f90 and test.dat.
+  % cvs commit test.f90 test.dat
+  [...]
+  /home/bobs1/physics/REPO/coulombLog/test.f90,v  <--  test.f90
+  new revision: 1.13; previous revision: 1.12
+  done
+  Checking in test.dat;
+  /home/bobs1/physics/REPO/coulombLog/test.dat,v  <--  test.dat
+  new revision: 1.8; previous revision: 1.7
+  done
+  
+* 11-Nov-2009
+  Replaced
+    ka0b2=kkb2/CMTOA0/CMTOA0
+  by
+    ka0b2=kkb2*A0CM**2
+  in dedxc_reg2. This changes dedx slightly. 
+
+  Regenerate test.f90:
+  plasma: DT alpha                                                                                         
+           2                                                                                             
+     0.10000000000000D+02     0.10000000000000D+02
+     0.10000000000000D+26     0.50000000000000D+25     0.50000000000000D+25
+     0.51099890200000D+03     0.18765439960000D+07     0.28148159940000D+07
+    -0.10000000000000D+01     0.10000000000000D+01     0.10000000000000D+01
+     0.20000000000000D+01     0.37530879920000D+07
+     0.35400000000000D+04
+  subroutine check: param
+     0.61260000000000D-03     0.43317361415488D-03     0.43317361415488D-03
+     0.61260000000000D-03     0.43317361415488D-03
+     0.52165248509904D-01     0.16557369600876D-02
+  subroutine check: dedx_bps [MeV/micron]
+     0.41858707852665D-01     0.27559193019122D-02     0.39102788550753D-01
+     0.56853073210029D-01     0.29113577874232D-02     0.53941715422605D-01
+    -0.14994365357364D-01    -0.15543848551099D-03    -0.14838926871853D-01
+  subroutine check: coeff_bps [MeV/micron]
+     0.42055681626787D-01     0.28696016141343D-02     0.39186080012653D-01
+     0.57117444408142D-01     0.30253585373435D-02     0.54092085870798D-01
+    -0.15061762781354D-01    -0.15575692320924D-03     0.54092085870798D-01
+  subroutine check: bps_rate
+     0.46954969358347D+01     0.16263009165916D-10
+     0.71297134262233D+01     0.10710515997059D-10
+
+  /home/bobs1/physics/REPO/coulombLog/test.dat,v  <--  test.dat
+  new revision: 1.9; previous revision: 1.8
+  done
+
+* 11-Nov-2009: coulombLog_1.13.1
+  Reorganize (but do not change subroutine names yet):
+
+  ------------------------
+  physvars.f90: <== CONVFACT now converts to Mev/micron. 
+  mathvars.f90:
+  vars.f90    :
+
+  acoeff.f90  : 
+  common.f90  : 
+  dedx.old.f90: 
+  ------------------------
+
+  acoeff.f90
+  % grep SUBROUTINE acoeff.f90 | grep -v END
+      SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+      SUBROUTINE a_sing(a, b, ac_s)
+      SUBROUTINE a_reg(ib, nni, vp, k2, kb2, betab, mb, ac_r)
+      SUBROUTINE a_quantum(ib, a, eta, aq)
+      SUBROUTINE coeff_bps_small_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+      SUBROUTINE coeff_bps_high_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+  % grep FUNCTION acoeff.f90 | grep -v END
+      FUNCTION dab_sing(u, a, b)
+      FUNCTION dab_reg(u, vp, ib, nni, k2, kb2, betab, mb)
+      FUNCTION daq(u, a, eta)
+
+  common.f90
+  % grep SUBROUTINE common.f90 | grep -v END
+      SUBROUTINE a_collect(ib, ibmax, ac_s, ac_r, aq, a_tot, a_e, a_i, &
+      SUBROUTINE param(nni, betab, nb, gb, ge, gi, etae, ze)
+      SUBROUTINE n_tg(t, g, n)
+      SUBROUTINE n_tze(t, ze, n)
+      SUBROUTINE frfi_p(x, alpha, fr, fi, fabs, farg)
+      SUBROUTINE frfi_one(x, fr, fi, fabs, farg)
+  % grep FUNCTION common.f90 | grep -v END
+      FUNCTION repsi(x)
+      FUNCTION repsi1(x)
+      FUNCTION repsi2(x)
+      FUNCTION j1(x)
+      FUNCTION j2(x)
+      FUNCTION j3(x)
+      FUNCTION j4(x)
+      FUNCTION daw(x)
+
+  dedx.f90
+  % grep SUBROUTINE dedx.f90 | grep -v END
+      SUBROUTINE dedx_bps_new(nni, ep, zp, mp, betab, zb, mb, nb,  &
+      SUBROUTINE dedx_quantum(a, e, mt, mr, dedxq)
+      SUBROUTINE dedx_sing(a, b, c, dedxc_s)  ! I_1(a,b,c)
+      SUBROUTINE dedx_sing2(a, b, c, dedxc_s) ! I_1(a,b,c) via Gaussian quadrature.
+      SUBROUTINE dedx_reg1(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE dedx_reg2(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE hi_new(nni, ib, kk, kkb2, abv, hii)
+      SUBROUTINE fri_new(nni, xb, kb2, fr, fi, fabs, farg)
+  % grep FUNCTION dedx.f90 | grep -v END
+      FUNCTION d_dedxq_new(a, e, mt, mr, u)
+      FUNCTION d_dedxc_s2(a, b, c, u)
+      FUNCTION kqm1(x)
+      FUNCTION kqm3(x)
+
+  dedx.old.f90
+  % grep SUBROUTINE dedx.old.f90 | grep -v END
+      SUBROUTINE dedx_bps(nni, ep, zp, mp, betab, zb, mb, nbb, dedxtot, &
+      SUBROUTINE dedxq(vp, dedxqtot, dedxqsumi)
+      SUBROUTINE dedxc(vp, dedxctot, dedxcsumi)
+      SUBROUTINE fri(xb, fr, fi, fabs, farg)
+      SUBROUTINE param(nni, betab, nb, gb, ge, gi, etae, ze)
+      SUBROUTINE n_tg(t, g, n)
+      SUBROUTINE n_tze(t, ze, n)
+      SUBROUTINE frfi_p(x, alpha, fr, fi, fabs, farg)
+      SUBROUTINE frfi_one(x, fr, fi, fabs, farg)
+  % grep FUNCTION dedx.old.f90 | grep -v END
+      FUNCTION dedxqi(v, a, e, rm, rr)
+      FUNCTION d_dedxq(r, s, rm, rr, x)
+      FUNCTION repsi(x)
+      FUNCTION repsi1(x)
+      FUNCTION repsi2(x)
+      FUNCTION kqm1(x)
+      FUNCTION kqm3(x)
+      FUNCTION intone(a, b, c)
+      FUNCTION inttwo(ib, abv)
+      FUNCTION hi(ib, abv)
+      FUNCTION j1(x)
+      FUNCTION j2(x)
+      FUNCTION j3(x)
+      FUNCTION j4(x)
+      FUNCTION daw(x)
+
+* 11-Nov-2009: coulombLog_1.13.2
+  Rename subroutines to something more appropriate.
+  1. dedx_bps_new ==> dedx_bps
+  2. d_dedxq_new ==> d_dedxq
+  3. hi_new      ==> hi
+  4. fri_new     ==> fri 
+
+  TO DO: need to compare dedx.f90/fri with rate.f90/frfi
+
+  passed checks; output of main_acoeff_dedx.f90:
+
+#  iu  ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+    0  0.1000E+01 -0.7332E+00 -0.8791E-02 -0.7244E+00 -0.7373E+00 -0.1238E-01 -0.7249E+00  0.4050E-02  0.3590E-02  0.4592E-03
+    0  0.1000E+01 -0.7334E+00 -0.8767E-02 -0.7247E+00 -0.7375E+00 -0.1236E-01 -0.7251E+00  0.4051E-02  0.3591E-02  0.4594E-03
+    0  0.1000E+01  0.2722E-01  0.2758E+00  0.3088E-01  0.2725E-01  0.1859E+00  0.3088E-01  0.3321E-01  0.3353E-01  0.3077E-01
+
+  ------------------------
+  physvars.f90: <== CONVFACT now converts to Mev/micron. 
+  mathvars.f90:
+  vars.f90    :
+
+  acoeff.f90  : 2009-11-11
+  common.f90  : 2009-11-11
+  dedx.old.f90: 2009-11-11
+  ------------------------
+
+  acoeff.f90
+  % grep SUBROUTINE acoeff.f90 | grep -v END
+      SUBROUTINE coeff_bps(nni, ep, zp, mp, betab, zb, mb, nb, &
+      SUBROUTINE a_sing(a, b, ac_s)
+      SUBROUTINE a_reg(ib, nni, vp, k2, kb2, betab, mb, ac_r)
+      SUBROUTINE a_quantum(ib, a, eta, aq)
+      SUBROUTINE coeff_bps_small_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+      SUBROUTINE coeff_bps_high_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+  % grep FUNCTION acoeff.f90 | grep -v END
+      FUNCTION dab_sing(u, a, b)
+      FUNCTION dab_reg(u, vp, ib, nni, k2, kb2, betab, mb)
+      FUNCTION daq(u, a, eta)
+
+  common.f90
+  % grep SUBROUTINE common.f90 | grep -v END
+      SUBROUTINE a_collect(ib, ibmax, ac_s, ac_r, aq, a_tot, a_e, a_i, &
+      SUBROUTINE param(nni, betab, nb, gb, ge, gi, etae, ze)
+      SUBROUTINE n_tg(t, g, n)
+      SUBROUTINE n_tze(t, ze, n)
+      SUBROUTINE frfi_p(x, alpha, fr, fi, fabs, farg)
+      SUBROUTINE frfi_one(x, fr, fi, fabs, farg)
+  % grep FUNCTION common.f90 | grep -v END
+      FUNCTION repsi(x)
+      FUNCTION repsi1(x)
+      FUNCTION repsi2(x)
+      FUNCTION j1(x)
+      FUNCTION j2(x)
+      FUNCTION j3(x)
+      FUNCTION j4(x)
+      FUNCTION daw(x)
+
+  dedx.f90
+  % grep SUBROUTINE dedx.f90 | grep -v END
+      SUBROUTINE dedx_bps(nni, ep, zp, mp, betab, zb, mb, nb,  &
+      SUBROUTINE dedx_quantum(a, e, mt, mr, dedxq)
+      SUBROUTINE dedx_sing(a, b, c, dedxc_s)  ! I_1(a,b,c)
+      SUBROUTINE dedx_sing2(a, b, c, dedxc_s) ! I_1(a,b,c) via Gaussian quadrature.
+      SUBROUTINE dedx_reg1(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE dedx_reg2(nni, ib, aab, kkb2, kk, dedxc_r)
+      SUBROUTINE hi(nni, ib, kk, kkb2, abv, hii)
+      SUBROUTINE fri(nni, xb, kb2, fr, fi, fabs, farg)
+  % grep FUNCTION dedx.f90 | grep -v END
+      FUNCTION d_dedxq(a, e, mt, mr, u)
+      FUNCTION d_dedxc_s2(a, b, c, u)
+      FUNCTION kqm1(x)
+      FUNCTION kqm3(x)
+
+* 11-Nov-2009: coulombLog_1.13.2
+  % cvs commit dedx.f90 common.f90 acoeff.f90
+  Checking in dedx.f90;
+  /home/bobs1/physics/REPO/coulombLog/dedx.f90,v  <--  dedx.f90
+  new revision: 1.14; previous revision: 1.13
+  done
+  Checking in common.f90;
+  /home/bobs1/physics/REPO/coulombLog/common.f90,v  <--  common.f90
+  new revision: 1.4; previous revision: 1.3
+  done
+  Checking in acoeff.f90;
+  /home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+  new revision: 1.30; previous revision: 1.29
+  done
+
+* 11-Nov-2009: coulombLog_2.0 [fresh checkout]
+  % cp ../coulombLog_1.13.2/physvars.f90 .
+  % cp ../coulombLog_1.13.2/test.f90 .
+  % cp ../coulombLog_1.13.2/changelog.txt .
+
+  % cvs commit
+  [...]
+  /local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+  new revision: 1.60; previous revision: 1.59
+  done
+  Checking in physvars.f90;
+  /local/bobs/physics/REPO/coulombLog/physvars.f90,v  <--  physvars.f90
+  new revision: 1.9; previous revision: 1.8
+  done
+  Checking in test.f90;
+  /local/bobs/physics/REPO/coulombLog/test.f90,v  <--  test.f90
+  new revision: 1.14; previous revision: 1.13
+  done
+
+* 21-Dec-2009
+  rate.f90
+
+  Calculates the quantum rate [needs debugging]. Also need to check on
+  cei_reg and its integration limits.
+
+      SUBROUTINE bps_cei_qm_mass(nni, betab, zb, mb, nb, cei_qm)
+      FUNCTION dcei_qm(x, eta_ei)
+
+* 12-Jan-2010
+  Quantum piece C_ei^quantum is now working. The full rate coefficients
+  for general eta and me now agree with the simplified version of C_eI
+  [the Born approximation and me --> 0].
+
+  valis% make
+  gfortran -g -fdefault-real-8 -c ferf.f
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c vars.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c mathvars.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c physvars.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c common.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c rate.f90
+  rate.f90:333.42:
+
+      REAL    :: xmin, xmax, dx, x, xm, xc, y, dcei_qm, qm
+                                         1
+  Warning: Unused variable xc declared at (1)
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c esplit.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c acoeff.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c dedx.f90
+  gfortran -O3 -g3 -fdefault-real-8 -Wall -ffast-math -c main_symmetry_1.01.f90
+  gfortran ferf.o vars.o mathvars.o physvars.o common.o rate.o
+    esplit.o acoeff.o dedx.o main_symmetry_1.01.o     -o clog
+
+  valis% more main_symmetry_1.01.f90: [see output below]
+  [...]
+    CALL bps_rate_born(nni,betab,zb,mb,nb,ln_bps_born,cei_born)
+    PRINT *, "**1:",cei_born
+    CALL bps_rate_mass(nni,betab,zb,mb,nb,ln_bps_mass,cei,delta,&
+      cei_sing,cei_reg,cei_qm)
+    PRINT *, "**1:",cei
+    PRINT *, "**1:",100*ABS((cei-cei_born)/cei)
+    PRINT *, "**2:",ln_bps_born
+    PRINT *, "**2:",ln_bps_mass
+    PRINT *, "**3:",cei_reg
+    PRINT *, "**3:",cei_sing
+    PRINT *, "**3:",cei_qm
+  [...]
+
+  Hydrogen plasma at ne=10^25 cm^-3 and Te=Ti=10 keV:
+  valis% clog
+  #   Plasma Parameters
+  #    electron and ion temp [keV]:   0.1000D+02   0.1000D+02
+  #    number density nb   [cm^-3]:   0.1000D+26   0.1000D+26
+  #    mass array mb         [amu]:   0.5486D-03   0.1007D+01
+  #    mass array mb         [keV]:   0.5110D+03   0.9383D+06
+  #    charge array zb            :  -0.1000D+01   0.1000D+01
+  #  ne[cm^-3]    Te[keV]    Ti[keV]        ge       gi          etae         ze/2**1.5
+  #  0.1000D+26  0.1000D+02  0.1000D+02  0.6126D-03  0.6126D-03  0.5217D-01  0.5854D-03
+  # V12 =  0.4195D+10
+  #
+  #  iu  ep[keV]     a_tot       a_e         a_i         ac_tot      ac_e        ac_i        aq_tot      aq_e        aq_i
+  **1:  2.228385516511006E+036    <=== born
+  **1:  2.220142886347336E+036    <=== full rate
+  **1:  0.371265751153088         <=== percent change
+  **2:   4.69580185075657         <=== coulomb log born
+  **2:   4.67843243344037         <=== coulomb log full
+  **3: -0.502368168904409         <=== regular  rate C_ep [p=proton]
+  **3:   7.62343277013442         <=== singular rate C_ep
+  **3:  -2.44263216778964         <=== quantum  rate C_ep 
+
+* 12-Jan-2010
+  The upper limit of integration needs to be checked again for the
+  regular contribution C_{eI}_reg.
+
+
+* 13-Jan-2010
+  New cvs checkout. Created test.tgz [containing test.f90 test.dat
+  test_make]. Added test.tgz and removed test.f90 from the repository.
+  The script test_make collects test files. As the test suit evolves,
+  it will be easier to deal with a single file test.tgz [which itself
+  will contain numerous files].
+
+  % make_test [creates test.tgz as above]
+  % cvs add test.tgz
+    cvs add: scheduling file `test.tgz' for addition
+    cvs add: use 'cvs commit' to add this file permanently
+  % cvs commit
+
+
+  Now let's remove test.f90 from main directory coulombLog:
+
+  1. First attempt
+  % cvs remove test.f90
+    cvs remove: file `test.f90' still in working directory
+    cvs remove: 1 file exists; remove it first
+    NOTE: must remove test.f90 first
+
+  2. Second attempt
+  % rm test.f90
+  % cvs remove test.f90
+    cvs remove: use 'cvs commit' to remove this file permanently
+  % cvs commit
+
+  NOTE: REPO/coulombLog needs to be fixed by hand on other machines
+  before synching disks:
+    1. cd /physics/REPO/coulombLog
+    2. rm rm rate.f90,v
+    3. sync directories
+
+* 13-Jan-2010
+  Improved test.f90 routine.
+
+  To run the test:
+  a) untar test.tgz [contains test.f90, test.dat, and script test_make]
+  b) write_dat=.FALSE. for testing
+  c) make with test.f90 as main driver
+  d) run executable. Program will compare old vs. new quantities,
+     where the old quantities are stored in test.dat. 
+
+  To make new data file test.dat:
+  a) untar test.tgz [contains test.f90, test.dat, and script test_make]
+  b) write_dat=.TRUE. for writing data file
+  c) Run executable to make new test.dat file.
+  d) Run script test_make to make tar-ball test.tgz
+  e) commit test.tgz to repository
+
+  New code added to test.f90 for rate.f90 changes:
+
+  !
+  ! subroutine check: bps_rate_mass and bps_rate_born
+  !
+    CALL  bps_rate_mass(nni, betab, zb, mb, nb, ln_bps_mass, cei_mass, & 
+      delta_mass, cei_sing_mass, cei_reg_mass, cei_qm_mass)
+    CALL bps_rate_born(nni, betab, zb, mb, nb, ln_bps_born, cei_born)
+    WRITE(1,'(64A)') 'subroutine check: bps_rate_mass and bps_rate_born [C]=[1/cm^3 s]'
+    WRITE(1,'(2D25.14)') ln_bps_mass, ln_bps_born
+    WRITE(1,'(2D25.14)') cei_mass, cei_born
+    WRITE(1,'(3D25.14)') cei_sing_mass, cei_reg_mass, cei_qm_mass
+    WRITE(1,'(1D25.14)') delta_mass
+
+  New data added to test.dat for rate.f90 changes:
+
+  subroutine check: bps_rate_mass and bps_rate_born [C]=[1/cm^3 s]
+     0.46816825505070D+01     0.46958018507566D+01
+     0.92570217682589D+36     0.92849396521292D+36
+     0.76269613114411D+01    -0.50166749503423D+00    -0.24436112658998D+01
+    -0.16674950342327D-02
+
+
+* 13-Jan-2021
+
+  More improvements to test.f90. The driver now contains a subroutine
+  define_plasma() where plasma parameters are set. The main program
+  now looks like:
+
+  PROGRAM main
+    USE bpsvars
+    USE physvars
+    USE allocatablevars 
+    IMPLICIT NONE
+    REAL    :: mp, ep, zp
+    INTEGER :: nni 
+    LOGICAL :: write_dat
+
+    OPEN(UNIT=1,FILE='test.dat')
+    write_dat=.TRUE.  ! create test.dat
+    write_dat=.FALSE. ! testing mode: read from test.dat
+
+    CALL define_plasma(ep,mp,zp,nni)
+    IF (write_dat) THEN
+       CALL data_generate(nni,ep,zp,mp,betab,zb,mb,nb)
+    ELSE
+       CALL data_test(nni,ep,zp,mp,betab,zb,mb,nb)
+    ENDIF
+    CLOSE(1)
+  END PROGRAM main
+
+  To change the testing procedures, we only need to modify (i) data_generate 
+  and (ii) data_test. 
+
+
+* 13-Jan-2010
+  Several main driver routines are now archived in the tar-ball
+  main.tgz. This has now been committed.
+
+  valis%  cvs add main.tgz
+  cvs add: scheduling file `main.tgz' for addition
+  cvs add: use 'cvs commit' to add this file permanently
+  valis%  cvs commit
+
+* 13-Jan-2010: coulombLog_2.01
+  New cvs checkout.
+  % cd coulomblog_2.01
+  % ls -l 
+    total 588
+    -rw-------+ 1 bobs1 x7  38182 Jan 12 16:28 acoeff.f90
+    -rw-------+ 1 bobs1 x7 215527 Jan 13 12:38 BPSparameters.nb
+    -rw-------+ 1 bobs1 x7  96815 Jan 13 13:35 changelog.txt
+    -rw-------+ 1 bobs1 x7  22971 Jan 12 14:53 common.f90
+    drwx------  2 bobs1 x7      5 Jan 13 13:38 CVS/
+    -rw-------+ 1 bobs1 x7  23592 Nov 11 17:47 dedx.f90
+    -rw-------+ 1 bobs1 x7  42188 Nov 10 19:24 dedx.old.f90
+    drwx------  3 bobs1 x7      4 Jan 13 13:38 doc/
+    -rw-------+ 1 bobs1 x7  36316 Oct 20 13:35 esplit.f90
+    -rw-------+ 1 bobs1 x7    105 May 13  2008 ferf.f
+    -rw-------+ 1 bobs1 x7  15097 Jan 13 10:35 main.f90
+    -rw-------+ 1 bobs1 x7    692 Aug 19 12:53 main.gnu
+    -rw-r--r--+ 1 bobs1 x7   3376 Jan 13 13:35 main.tgz
+    -rw-------+ 1 bobs1 x7   1042 Jan 13 12:38 makefile
+    -rw-------+ 1 bobs1 x7    955 Jun 15  2009 mathvars.f90
+    -rw-------+ 1 bobs1 x7   1772 Jan 12 14:53 physvars.f90
+    -rw-------+ 1 bobs1 x7  23244 Jan 13 12:09 rate.f90
+    -rw-r--r--+ 1 bobs1 x7   5887 Jan 13 13:27 test.tgz
+    -rw-------+ 1 bobs1 x7   3617 Nov 10 16:33 vars.f90
+
+   NOTE: Must remove main.f90 and main.gnu; place main.gnu in main.tgz
+   using main_make.
+
+   % rm main.f90 main.gnu
+   % cvs remove main.f90 main.gnu
+     cvs remove: scheduling `main.f90' for removal
+     cvs remove: scheduling `main.gnu' for removal
+     cvs remove: use 'cvs commit' to remove these files permanently
+   % 
+
+
+
+
+
+
+* 13-Jan-2010: coulombLog_2.01
+  New cvs checkout.
+  % cd coulomblog_2.01
+  % ls -l 
+    total 588
+    -rw-------+ 1 bobs1 x7  38182 Jan 12 16:28 acoeff.f90
+    -rw-------+ 1 bobs1 x7 215527 Jan 13 12:38 BPSparameters.nb
+    -rw-------+ 1 bobs1 x7  96815 Jan 13 13:35 changelog.txt
+    -rw-------+ 1 bobs1 x7  22971 Jan 12 14:53 common.f90
+    drwx------  2 bobs1 x7      5 Jan 13 13:38 CVS/
+    -rw-------+ 1 bobs1 x7  23592 Nov 11 17:47 dedx.f90
+    -rw-------+ 1 bobs1 x7  42188 Nov 10 19:24 dedx.old.f90
+    drwx------  3 bobs1 x7      4 Jan 13 13:38 doc/
+    -rw-------+ 1 bobs1 x7  36316 Oct 20 13:35 esplit.f90
+    -rw-------+ 1 bobs1 x7    105 May 13  2008 ferf.f
+    -rw-------+ 1 bobs1 x7  15097 Jan 13 10:35 main.f90
+    -rw-------+ 1 bobs1 x7    692 Aug 19 12:53 main.gnu
+    -rw-r--r--+ 1 bobs1 x7   3376 Jan 13 13:35 main.tgz
+    -rw-------+ 1 bobs1 x7   1042 Jan 13 12:38 makefile
+    -rw-------+ 1 bobs1 x7    955 Jun 15  2009 mathvars.f90
+    -rw-------+ 1 bobs1 x7   1772 Jan 12 14:53 physvars.f90
+    -rw-------+ 1 bobs1 x7  23244 Jan 13 12:09 rate.f90
+    -rw-r--r--+ 1 bobs1 x7   5887 Jan 13 13:27 test.tgz
+    -rw-------+ 1 bobs1 x7   3617 Nov 10 16:33 vars.f90
+
+  % tar ztvf test.tgz
+    -rw------- bobs1/x7      32610 2010-01-13 13:19:14 test.f90
+    -rw------- bobs1/x7       1398 2010-01-13 12:33:02 test.dat
+    -rwx------ bobs1/x7        370 2010-01-13 10:42:21 test_make
+
+  % tar ztvf main.tgz
+    -rw------- bobs1/x7      15097 2010-01-13 10:35:14 main.f90
+    -rwx------ bobs1/x7        166 2010-01-13 13:31:53 main_make
+    -rw------- bobs1/x7       6179 2010-01-13 13:29:28 main_CeI_1.0.f90
+
+  % ls -l doc
+    total 3331
+    drwx------+ 2 bobs1 x7       5 Jan 13 13:38 CVS/
+    -rw-------+ 1 bobs1 x7 4334920 Jan 12 16:48 docs.tgz
+
+  % tar ztvf doc/docs.tgz
+    -rw------- bobs/bobs  10455040 2009-11-03 12:46:09 A_asymptotic_doc.tar
+    -rw------- bobs/bobs    797669 2008-06-25 21:38:10 BPS_phys_rep.pdf
+    -rw-rw-r-- bobs/bobs     18464 2008-07-05 23:55:50 cei_reg1.0.tex
+    -rw-rw-r-- bobs/bobs     43907 2008-11-25 12:04:23 cei_reg1.1.tex
+    -rw-rw-r-- bobs/bobs     49633 2008-11-25 12:04:23 cei_reg1.2.tex
+    -rw------- bobs/bobs    363819 2008-06-25 21:38:10 dedxFortran.bps2.1.pdf
+    -rw------- bobs/bobs    207046 2008-06-25 21:38:10 dedxFortran.bps2.1.tex
+    -rw------- bobs/bobs    448258 2008-06-25 21:38:10 dedxFortran.bps2.2.pdf
+    -rw------- bobs/bobs    207215 2008-06-25 21:38:10 dedxFortran.bps2.2.tex
+    -rw------- bobs/bobs     49169 2008-12-04 12:45:02 rate1.0.tex
+    -rw------- bobs/bobs     56367 2010-01-12 14:26:10 rate1.1.tex
+
+
+* 13-Jan-2010: coulombLog_2.01
+  Now I can start work on the symmetry of C_{ab}
+
+* 14-Jan-2010
+  Fixed small bug in common.f90:a_collect
+  1. added condition IMPLICIT NONE
+  2. added the INTOUT statements:
+     REAL,    INTENT(INOUT) :: a_e    ! electron component
+     REAL,    INTENT(INOUT) :: a_i    ! running total over ions
+     REAL,    INTENT(INOUT) :: ac_tot ! running total over ions
+     REAL,    INTENT(INOUT) :: ac_e   ! electron component
+     REAL,    INTENT(INOUT) :: ac_i   ! running total over ions
+     REAL,    INTENT(INOUT) :: aq_tot ! running total over ions
+     REAL,    INTENT(INOUT) :: aq_e   ! electron component
+     REAL,    INTENT(INOUT) :: aq_i   ! running total over ions
+
+* 15-Jan-2010
+  New scripts
+  1. test_make  ==> test.tgz
+  2. main_make  ==> main.tgz
+
+  % tar ztf test.tgz
+    test.f90
+    test.dat
+    test_make
+
+  % tar ztf main.tgz
+    BPSparameters.nb
+    main_make
+    main.gnu
+    main.f90
+    main_CeI.f90
+    main_symmetry.f90
+    main_acoeff_dedx.f90
+    main_acoeff.f90
+    main.acoeff.smallE.dat
+    main.acoeff.highE.dat
+    main.acoeff.dat
+
+* 20-Jan-2010
+  Added deuteron and triton masses to physvars.f90 in g and keV. Added
+  proton mass in g:
+
+      REAL,    PARAMETER :: AMUKEV= 0.931494012E6  ! [keV] 1 AMU 
+      REAL,    PARAMETER :: AMUG  =1.660538783E-24 ! [g] AMU
+      REAL,    PARAMETER :: MEKEV = 510.998902     ! [keV] electron mass 
+      REAL,    PARAMETER :: MPKEV = 0.938271998E6  ! [keV] proton mass 
+      REAL,    PARAMETER :: MDKEV =2.0141018*AMUKEV! [keV] deuterium mas
+      REAL,    PARAMETER :: MTKEV =3.0160492*AMUKEV! [keV] triton masss
+      REAL,    PARAMETER :: MPG   =1.0072765*AMUG  ! [g] deuterium mass
+      REAL,    PARAMETER :: MDG   =2.0141018*AMUG  ! [g] deuterium mass
+      REAL,    PARAMETER :: MTG   =3.0160492*AMUG  ! [g] triton mass
+
+* 09-Feb-2010: coulombLog_2.03
+  Small energy asymptotics for ac_s.
+
+  acoeff.f90:
+  !
+  ! A-classical-singular 
+  !
+  IF ( ABS(a) < TOL_SMALL_E ) THEN ! asymptotic low energy form
+     ac_s=-(2./3. - 0.4*a)*(LOG(betab(ib)*BEKEV*ABS(zp*zb(ib))* &
+     0.5*k*A0CM*mbpb(ib) ) + 2*GAMMA) - (4./15.)*a
+  ELSE
+     CALL a_sing(a,b,ac_s) 
+  ENDIF
+  ac_s=c1*c2*ac_s
+
+  
+* 27-Feb-2010: coulombLog_3.00
+  Fresh cvs checkout [includes bug fix in subroutine a_collect, 
+  but still need to check].
+  Keep this version fixed for archiving purposes. 
+
+
+* 27-Feb-2010: coulombLog_3.01_2010-02-09
+  % cp -rp coulombLog_3.00 coulombLog_3.01_2010-02-09
+
+  Something is wrong!!
+  perform test:
+  % tar zxvf test.tgz
+  % make
+  % clog
+ calling test_plasma ...
+  passed.
+ calling: test_param ...
+  passed.
+ calling: test_dedx_bps ...
+ ERROR: dedx_tot
+  4.29730553376247923E-002
+  4.18587078526650030E-002
+  1.31359698661472849E-002
+ ERROR: dedx_i
+  3.87026678687194198E-003
+  2.75591930191220000E-003
+  0.16817328551124600     
+ ERROR: dedxc_tot
+  5.80296502844591666E-002
+  5.68530732100289982E-002
+  1.02415492829661045E-002
+ ERROR: dedxc_i
+  4.08793486185366189E-003
+  2.91135778742319983E-003
+  0.16809942566868114     
+ ERROR: dedxq_tot
+ -1.50565949468343726E-002
+ -1.49943653573640003E-002
+  2.07080202564036749E-003
+ ERROR: dedxq_i
+ -2.17668074981720367E-004
+ -1.55438485510990012E-004
+  0.16678771176939994     
+ calling: test_coeff_bps_mass ...
+ ERROR: a_tot
+  4.32225578499242785E-002
+  4.20556816267870018E-002
+  1.36831650172133321E-002
+ ERROR: a_i
+  4.03647783727132444E-003
+  2.86960161413430011E-003
+  0.16896362565008211     
+ ERROR: ac_tot
+  5.83466775243987948E-002
+  5.71174444081420027E-002
+  1.06460179637010016E-002
+ ERROR: ac_i
+  4.25459165360070161E-003
+  3.02535853734350012E-003
+  0.16885185805066219     
+ ERROR: aq_tot
+ -1.51241196744745180E-002
+ -1.50617627813540000E-002
+  2.06576346448595185E-003
+ ERROR: aq_i
+ -2.18113816329377607E-004
+ -1.55756923209239990E-004
+  0.16678730514479509     
+ calling: test_bps_rate ...
+  passed.
+
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  Start over with an older version of 3.02:
+  % cvs co -D 2010-02-21 coulombLog
+  % mv coulombLog coulombLog_3.02_2010-02-21
+
+  run test program:
+  % tar zxvf test.tgz [edit makefile for test compilation]
+  % make
+  % clog
+ calling test_plasma ...
+  passed.
+ calling: test_param ...
+  passed.
+ calling: test_dedx_bps ...
+  passed.
+ calling: test_coeff_bps ...
+  passed.
+ calling: test_bps_rate ...
+  passed.
+
+  Merge version 3.01 [new interface in acoeff] with 3.02 [old interface]???
+
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  Start over with an older version of 3.02:
+
+  % ls -l
+  -rw-------.  54559 2010-02-19 14:43 acoeff.f90
+  -rw-------. 102763 2010-01-27 20:16 changelog.txt
+  -rw-------.  23542 2010-01-14 14:15 common.f90
+  drwxrwxr-x.   4096 2010-02-28 08:10 CVS
+  -rw-------.  23745 2010-02-18 11:39 dedx.f90
+  -rw-rw-r--.  42188 2009-11-10 19:24 dedx.old.f90
+  drwxrwxr-x.   4096 2010-02-28 08:10 doc
+  -rw-------.  36316 2009-10-20 13:35 esplit.f90
+  -rw-rw-r--.    105 2008-05-13 14:47 ferf.f
+  -rw-------. 650260 2010-01-27 20:16 main.tgz
+  -rw-------.   2345 2010-02-28 08:16 makefile
+  -rw-------.    955 2009-06-15 17:13 mathvars.f90
+  -rw-------.   2189 2010-02-18 11:39 physvars.f90
+  -rw-------.  23289 2010-02-19 14:43 rate.f90
+  -rw-rw-r--.     36 2010-01-25 11:58 README
+  -rw-------.  32610 2010-02-28 08:16 test2.f90
+  -rw-------.   1398 2010-01-14 14:40 test.dat
+  -rw-------.  32610 2010-01-14 14:40 test.f90
+  -rwx------.    370 2010-01-13 10:42 test_make
+  -rw-------.   5873 2010-01-14 14:42 test.tgz
+  -rw-------.   3783 2010-02-18 11:39 vars.f90
+
+  acoeff.f90:
+  SUBROUTINE coeff_bps_mass(nni, ep, zp, mp, betab, zb, mb, nb, &
+             a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+
+  acoeff.f90:
+  IF (ib == 1) THEN
+     aq_lim=0 
+  ELSE
+     eta =ABS(zp*zb(ib))*2.1870E8/vp  ! [dimensionless] quantum parameter
+     aq_lim=LOG(eta) + GAMMA
+     aq_lim=aq_lim*c1/a/2
+  ENDIF
+  CALL a_collect(ib,nnb,ac_s_lim,ac_r_lim,aq_lim,a_tot_lim,a_e_lim, &
+    a_i_lim,ac_tot_lim,ac_e_lim,ac_i_lim,aq_tot_lim,aq_e_lim,aq_i_lim)
+
+  *** So far no work on ac_s and ac_r [singular and regular pieces]. ***
+  ----------------------------------------------------------------------
+
+  acoeff.f90:
+   SUBROUTINE coeff_bps_mass(nni, ep, zp, mp, betab, zb, mb, nb, &
+              a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+   [...]
+   CALL a_sing_mass(a,b,ac_s) 
+   ac_s=c1*c2*ac_s
+   CALL a_reg_mass(ib,nni,vp,k2,kb2,betab,mb,ac_r)
+   ac_r=c1*ac_r
+   CALL a_quantum_mass(ib,a,eta,aq) ! eta = dimensionless quantum param.
+   aq=c1*c2*aq
+   CALL a_collect(ib,NNB,ac_s,ac_r,aq,a_tot,a_e,a_i,&
+   ac_tot,ac_e,ac_i,aq_tot,aq_e,aq_i)
+   [...]
+
+   where [similarly for a_reg_mass and a_quantum_mass]
+
+   SUBROUTINE a_sing_mass(a, b, ac_s)
+   REAL,    INTENT(IN)  :: a
+   REAL,    INTENT(IN)  :: b
+   REAL,    INTENT(OUT) :: ac_s
+   CALL a_sing(a, b, ac_s)   <== full numerical subroutine
+  END SUBROUTINE a_sing_mass
+
+  NOTE: I will place asymptotic limits in a_sing_mass and will
+  leave a_sing alone to perform strictly numerical evaluation.
+
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+
+  The first thing to do is check a_collect.
+
+      SUBROUTINE a_collect(ib, ibmax, ac_s, ac_r, aq, a_tot, a_i, a_e, &
+        ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e)
+        [...]
+        IF (ib==1) THEN
+           ac_e=ac_s + ac_r
+           aq_e=aq
+           a_e =ac_e + aq_e
+        ELSE
+           ac_i=ac_i + ac_s + ac_r
+           aq_i=aq_i + aq
+           a_i =a_i  + (ac_s + ac_r) + aq
+        ENDIF
+        IF (ib==ibmax) THEN
+           ac_tot = ac_e + ac_i
+           aq_tot = aq_e + aq_i
+           a_tot  = ac_tot  + aq_tot
+        ENDIF
+      END SUBROUTINE a_collect
+
+
+  1. test driver called test2.f90
+     % cp test.f90 test2.f90
+  2. Reversed order of e and i components in a_collect. This
+     will agree with calling sequence of coeff_bps_mass.
+
+  3. New subroutine for a_collect [modified calls to a_collect in acoeff.f90
+     and dedx.f90]. New routine passes test.
+
+      SUBROUTINE a_collect(ib, ibmax, ac_s, ac_r, aq, a_tot, a_i, a_e, &
+        ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e, ac_s_i, ac_s_e, ac_r_i, ac_r_e)
+      [...]
+        IF (ib==1) THEN
+           ac_sr=ac_s + ac_r
+           ac_e=ac_sr
+           aq_e=aq
+           a_e =ac_e + aq_e
+
+           ac_s_e=ac_s
+           ac_r_e=ac_r
+        ELSE
+           ac_sr=ac_s + ac_r
+           ac_i=ac_i + ac_sr
+           aq_i=aq_i + aq
+           a_i =a_i  + ac_sr + aq
+
+           ac_s_i=ac_s_i + ac_s
+           ac_r_i=ac_r_i + ac_r
+        ENDIF
+        IF (ib==ibmax) THEN
+           ac_tot = ac_e + ac_i
+           aq_tot = aq_e + aq_i
+           a_tot  = ac_tot  + aq_tot
+        ENDIF
+      END SUBROUTINE a_collect
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  The subroutine a_collect seems to be working. 
+
+  % clog
+  calling test_plasma ...
+  passed.
+  calling: test_param ...
+  passed.
+  calling: test_dedx_bps ...
+  passed.
+  calling: test_coeff_bps ...
+  passed.
+  calling: test_bps_rate ...
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  Files are out of sync  now. How do I fix this?!?
+  % cvs commit
+  cvs commit: Examining .
+  cvs commit: cannot commit with sticky date for file `acoeff.f90'
+  cvs commit: cannot commit with sticky date for file `common.f90'
+  cvs commit: cannot commit with sticky date for file `dedx.f90'
+  cvs commit: cannot commit with sticky date for file `makefile'
+  cvs commit: Examining doc
+  cvs [commit aborted]: correct above errors first!
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  Look at small-E behavior in acoeff.f90.
+
+   SUBROUTINE coeff_bps_small_E(nni, ep, zp, mp, betab, zb, mb, nb,   &
+         a_tot_lim, a_i_lim, a_e_lim, ac_tot_lim, ac_i_lim, ac_e_lim, &
+         aq_tot_lim, aq_i_lim, aq_e_lim, ac_s_i_lim, ac_s_e_lim,      &
+         ac_r_i_lim, ac_r_e_lim)
+   [...]
+     DO ib=1,nni+1
+     IF (zb(ib) .NE. 0.) THEN
+        [...]
+        CALL a_sing_ib_small_E(nni,ib,ep,zp,mp,betab,zb,mb,nb,ac_s_lim)
+        ac_s_lim=c1*c2*ac_s_lim
+        CALL a_reg_ib_small_E(nni,ib,ep,zp,mp,betab,zb,mb,nb,ac_r_lim)
+        ac_r_lim=c1*ac_r_lim
+        CALL aq_ib_small_E(nni, ib, ep, zp, mp, betab, zb, mb, nb, aq_lim)
+        aq_lim=c1*c2*aq_lim
+
+        CALL a_collect(ib,nnb,ac_s_lim,ac_r_lim,aq_lim,a_tot_lim,a_i_lim,   &
+          a_e_lim,ac_tot_lim,ac_i_lim,ac_e_lim,aq_tot_lim,aq_i_lim,aq_e_lim,&
+          ac_s_i_lim, ac_s_e_lim, ac_r_i_lim, ac_r_e_lim)
+   [...]          
+
+   % clog [test]
+     calling test_plasma ...
+     passed.
+     calling: test_param ...
+     passed.
+     calling: test_dedx_bps ...
+     passed.
+     calling: test_coeff_bps ...
+     passed.
+     calling: test_bps_rate ...
+     passed.
+
+* 28-Feb-2010: coulombLog_3.02_2010-02-21
+  Save this version and do not touch! Must figure out
+  how to commit.
+
+
+* 28-Feb-2010: coulombLog_3.03
+  Same as version 3.02. Must commit work now.
+
+  1. % cvs commit
+  cvs commit: Examining .
+  cvs commit: cannot commit with sticky date for file `acoeff.f90'
+  cvs commit: cannot commit with sticky date for file `common.f90'
+  cvs commit: cannot commit with sticky date for file `dedx.f90'
+  cvs commit: cannot commit with sticky date for file `makefile'
+  cvs commit: Examining doc
+  cvs [commit aborted]: correct above errors first!
+
+  2. Fix this 
+  % cvs update -A
+  cvs update: Updating .
+  C acoeff.f90
+  C common.f90
+  C dedx.f90
+  C makefile
+  ? test.dat
+  ? test.f90
+  ? test2.f90
+  ? test_make
+  cvs update: Updating doc
+
+  3. Copied files acoeff.f90, common.f90 dedx.f90, makefile 
+  from previous version 3.02. 
+
+  4. cvs commit
+    cvs commit: Examining .
+cvs commit: Examining doc
+Checking in acoeff.f90;
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.39; previous revision: 1.38
+done
+Checking in common.f90;
+/local/bobs/physics/REPO/coulombLog/common.f90,v  <--  common.f90
+new revision: 1.9; previous revision: 1.8
+done
+Checking in dedx.f90;
+/local/bobs/physics/REPO/coulombLog/dedx.f90,v  <--  dedx.f90
+new revision: 1.18; previous revision: 1.17
+done
+Checking in makefile;
+/local/bobs/physics/REPO/coulombLog/makefile,v  <--  makefile
+new revision: 1.69; previous revision: 1.68
+done
+
+* 28-Feb-2010: coulombLog_3.04
+  Fresh checkout.
+  % tar zxvf test.tgz
+  % make
+  % clog [test]
+ calling test_plasma ...
+  passed.
+ calling: test_param ...
+  passed.
+ calling: test_dedx_bps ...
+  passed.
+ calling: test_coeff_bps_mass ...
+  passed.
+ calling: test_bps_rate ...
+  passed.
+
+
+* 28-Feb-2010: coulombLog_3.04
+  Updated main.tgz. Replaced _ by . in name of file, 
+  e.g. main_foo.f90 ==> main.foo.f90.
+
+  % cvs commit
+  cvs commit: Examining .
+  cvs commit: Examining doc
+  Checking in main.tgz;
+  /local/bobs/physics/REPO/coulombLog/main.tgz,v  <--  main.tgz
+  new revision: 1.16; previous revision: 1.15
+  done
+  Checking in makefile;
+  /local/bobs/physics/REPO/coulombLog/makefile,v  <--  makefile
+  new revision: 1.70; previous revision: 1.69
+  done
+
+* 28-Feb-2010: coulombLog_3.04
+  Fix call to coeff_bps_mass in
+  1. main.acoeff.dedx.f90: fixed
+  2. main.CeI.f90        : N/A
+  3. main.f90            : fixed
+  4. main.symmetry.f90   : fixed
+
+  % main_make
+  % cvs commit
+
+
+  
+* 27-Apr-2010
+  % cvs commit
+
+cvs commit: Examining .
+cvs commit: Examining doc
+Checking in acoeff.f90;
+/home/bobs1/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.45; previous revision: 1.44
+done
+Checking in esplit.f90;
+/home/bobs1/physics/REPO/coulombLog/esplit.f90,v  <--  esplit.f90
+new revision: 1.12; previous revision: 1.11
+done
+Checking in main.tgz;
+/home/bobs1/physics/REPO/coulombLog/main.tgz,v  <--  main.tgz
+new revision: 1.28; previous revision: 1.27
+done
+Checking in makefile;
+/home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+new revision: 1.84; previous revision: 1.83
+done
+Checking in test.tgz;
+/home/bobs1/physics/REPO/coulombLog/test.tgz,v  <--  test.tgz
+new revision: 1.15; previous revision: 1.14
+
+
+* 29-Apr-2010
+  % cvs commit
+
+  Complete reorg of acoeff code:
+ 
+  1. bps_acoeff_ab_mass(nni, ep, mp, zp, ia, ib, betab, zb, mb, nb, &
+            a_ab, a_ab_sing, a_ab_reg, a_ab_qm)
+
+  Returns A_{ab} etc. for given ep, mp, zp, and components ia, and ib
+
+  2. bps_acoeff_ab_matrix(nni, ep, betab, zb, mb, nb, &
+            a_ab, a_ab_sing, a_ab_reg, a_ab_qm)
+
+  Returns matrix A_{ab} of coefficients. This subroutine calls bps_acoeff_ab_mass
+
+
+  3. bps_acoeff_ei_mass(nni, ep, zp, mp, betab, zb, mb, nb,         &
+            a_tot, a_i, a_e, ac_tot, ac_i, ac_e, aq_tot, aq_i, aq_e,&
+            ac_s_i, ac_s_e, ac_r_i, ac_r_e)
+
+  Returns the same output as previously, but calls bps_acoeff_ab_mass as the
+  workhorse. 
+
+  4. Cleaned up acoeff.f90. Removed a number of extraneous subroutines. 
+
+  NOTE: I may have to fix main.x.f90 codes. 
+
+
+* 04-May-2010
+  dE/dx and dedx_fr_Acoeff do not agree. The regular piece in A is  wrong, particularly for the ions.
+
+  old results:
+  10-Nov-2009
+  #      ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+  dedx:  0.1000E+01 -0.7333E+00 -0.8792E-02 -0.7245E+00 -0.7373E+00 -0.1238E-01 -0.7249E+00  0.4050E-02  0.3590E-02  0.4592E-03
+  A's :  0.1000E+01 -0.7334E+00 -0.8767E-02 -0.7247E+00 -0.7375E+00 -0.1236E-01 -0.7251E+00  0.4051E-02  0.3591E-02  0.4594E-03
+  %   :  0.1000E+01  0.2238E-01  0.2819E+00  0.2606E-01  0.2244E-01  0.1903E+00  0.2606E-01  0.3321E-01  0.3353E-01  0.3077E-01
+
+
+  new results
+  #    ep[keV]     dedx_tot    dedx_e      dedx_i      dedxc_tot   dedxc_e     dedxc_i     dedxq_tot   dedxq_e     dedxq_i
+  dedx 0.1000E+01 -0.7332E+00 -0.8791E-02 -0.7244E+00 -0.7373E+00 -0.1238E-01 -0.7249E+00  0.4050E-02  0.3590E-02  0.4592E-03
+  A's  0.1000E+01 -0.7855E+00 -0.8764E-02 -0.7768E+00 -0.7896E+00 -0.1235E-01 -0.7772E+00  0.4049E-02  0.3590E-02  0.4592E-03
+       0.1000E+01  0.6656E+01  0.3061E+00  0.6734E+01  0.6621E+01  0.2174E+00  0.6730E+01  0.9865E-03  0.6739E-03  0.4592E-03
+                   ----------              ----------  ----------              ----------
+
+  1. dE/dx from dedx_bps() agree well enough between old and new versions.  
+  2. dE/dx from dedx_fr_coeff_bps() does not agree between old and new versions. 
+
+* 06-May-2010
+
+  cvs commit
+
+  Found bug in acoeff.f90 in a_reg_mass. See documentation in
+  acoeff/acoeff1.3.tex. I can now reproduce C_{ab} from the
+  A-integral. For small masses the results quite good (< 1%), but for
+  realistic masses the results are not so good. I need to find a
+  better way of doing the regular integral.
+
+/local/bobs/physics/REPO/coulombLog/acoeff.f90,v  <--  acoeff.f90
+new revision: 1.48; previous revision: 1.47
+done
+Checking in changelog.txt;
+/local/bobs/physics/REPO/coulombLog/changelog.txt,v  <--  changelog.txt
+new revision: 1.81; previous revision: 1.80
+done
+Checking in main.tgz;
+/local/bobs/physics/REPO/coulombLog/main.tgz,v  <--  main.tgz
+new revision: 1.30; previous revision: 1.29
+done
+Checking in makefile;
+/local/bobs/physics/REPO/coulombLog/makefile,v  <--  makefile
+new revision: 1.88; previous revision: 1.87
+done
+Checking in test.tgz;
+/local/bobs/physics/REPO/coulombLog/test.tgz,v  <--  test.tgz
+new revision: 1.17; previous revision: 1.16
+
+
+* 10-May-2010
+  Refactorized C_{ab} code:
+
+* bps_rate_cab_mass(nni, ia, ib, betab, zb, mb, nb, &
+        c_ab, c_ab_sing, c_ab_reg, c_ab_qm)
+
+  Main driver so to speak.
+
+* bps_rate_cab_matrix(nni, betab, zb, mb, nb, &
+            c_ab, c_ab_sing, c_ab_reg, c_ab_qm)
+
+  Loops over ia and ib; calls bps_rate_cab_mass.
+
+* bps_rate_cei_mass(nni, betab, zb, mb, nb, ln_bps,      & 
+      delta, cei_tot, cei_i, cei_e, ceic_tot, ceic_i, ceic_e, ceiq_tot, &
+      ceiq_i, ceiq_e, ceic_s_i, ceic_s_e, ceic_r_i , ceic_r_e, ceib)
+
+  Sets ia=1 and loops over ib; calls bps_rate_cab_mass.
+
+
+  % cvs commit
+cvs commit: Examining .
+cvs commit: Examining doc
+cvs commit: Examining main
+cvs commit: Examining test
+Checking in makefile;
+/home/bobs1/physics/REPO/coulombLog/makefile,v  <--  makefile
+new revision: 1.92; previous revision: 1.91
+done
+Checking in rate.f90;
+/home/bobs1/physics/REPO/coulombLog/rate.f90,v  <--  rate.f90
+new revision: 1.37; previous revision: 1.36
+done
+
