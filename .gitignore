@@ -1,0 +1,15 @@
+# No *.pyc or *.so (compiled) files
+*.pyc
+*.so
+
+# No temporary files
+*~
+
+# No temporary tex files
+*.aux
+*.log
+*.toc
+
+# No Mac file
+.DS_Store
+._.DS_Store

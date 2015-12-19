@@ -1,0 +1,13 @@
+* Dean's energy splitting notebooks
+  1. A_Coefficients.nb
+  2.  E_Partition.nb
+
+* Calculates various plasma parameters such as g, kappa, etc.
+  1. BPSparameters.nb
+
+* Li & Petross vs BPS for various quantites
+  1. LPvsBPS3.3.nb
+
+* other
+   main.dedx.nb
+   main.range.nb

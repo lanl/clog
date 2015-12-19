@@ -1,0 +1,86 @@
+# macro read main.sm
+# plot [or eps]
+# 
+# 
+dedx
+
+    set x0= 0.      # MeV
+    set x1= 3.500   # MeV
+    set x1=1
+    set y1= 0.3     # MeV/micron
+    set y0= 0       # MeV/micron
+
+    set gx1=5000 
+    set gx2=30000 
+    set gy1=5000 
+    set gy2=25000 
+    location $gx1 $gx2 $gy1 $gy2 
+#   location 5000 29000 5000 25000 
+
+    expand 1.3 lweight 2 ltype 0 ctype black ptype 4 3
+    limits $(x0) $(x1) $(y0) $(y1)
+    box 1 2 0 0
+#    relocate $(x0-0.001) $(y1+0.0005) ctype black label \
+#    "gr041.sm: T_e=10 keV  T_i=10  keV  n_e=10^{25} cm^{-3}"
+# axes
+    ctype black
+    xlabel E_p (MeV)
+    ylabel dE/dx (MeV/\mu m)
+#
+#
+    set Lmin=25
+    set Lmax=5022
+    data dedx.bps.out
+    lines $(Lmin) $(Lmax)  read{Ep 2  dedxtot 3 dedxi 4 dedxe 5}
+    set nn = 1000.
+    set Ep = Ep/nn
+    ltype 0 lweight 2.5 ctype green connect Ep dedxe
+    ltype 0 lweight 2.5 ctype red   connect Ep dedxi
+#   ltype 0 lweight 2.5 ctype blue  connect Ep dedxtot
+
+#
+#
+    set Lmin=20
+    set Lmax=5022
+    data dedx.fr.out
+    lines $(Lmin) $(Lmax)  read{Ep 2  dedxtot 3 dedxe 4 dedxe 5}
+    set nn = 1000.
+    set Ep = Ep/nn
+    ltype 1 lweight 2.5 ctype green connect Ep dedxe
+    ltype 1 lweight 2.5 ctype red   connect Ep dedxi
+#   ltype 1 lweight 2.5 ctype blue  connect Ep dedxtot
+#
+# y=0 axis
+#
+    relocate $(x0) 0.0  ltype 0 ctype black draw $(x1) 0.0
+
+# legend
+#
+#    set dx=0.002
+#    set dy=-0.1E-5
+#
+#    set x1=20. 
+#    set x2=30. 
+#    set y1=-0.002
+#    set y2=-0.002
+#    relocate $(x1) $(y1)  ltype 0 lweight 2.5 ctype blue draw $(x2) $(y2)
+#    relocate $(x2+dx) $(y2+dy)  lweight 2 ctype black label "A_{q,e} "
+#
+#    set y1=-0.004
+#    set y2=-0.004
+#    relocate $(x1) $(y1)  ltype 0 lweight 2.5 ctype red draw $(x2) $(y2)
+#    relocate $(x2+dx) $(y2+dy)  lweight 2 ctype black label "A_{q,e}^{asymptotic} "
+
+
+plot
+   erase
+   dedx
+
+eps
+   erase
+   device postencap dedx_bps_fr.eps
+   dedx
+   hardcopy
+   device x11
+   erase
+   plot
