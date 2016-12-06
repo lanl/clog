@@ -3,6 +3,12 @@
 
 LA-CC-14-047
 
+Clog is a library of charged particle stopping powers and related Coulomb logarithm
+processes in a plasma. The stopping power is a particularly useful quantity for
+plasma physics, as it measures the energy loss of per unit length of charged particle
+as it traverses a plasma. Clog's primary stopping power is the BPS (Brown-Preston-Singleton)
+theory. 
+
 Copyright (c) 2016, Los Alamos National Security, LLC All rights reserved.
 Copyright 2016. Los Alamos National Security, LLC. This software was produced
 under U.S. Government contract DE-AC52-06NA25396 for Los Alamos National
