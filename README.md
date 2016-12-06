@@ -6,7 +6,8 @@ LA-CC-14-047
 Clog is a library of charged particle stopping powers and related Coulomb logarithm
 processes in a plasma. The stopping power is a particularly useful quantity for
 plasma physics, as it measures the energy loss of per unit length of charged particle
-as it traverses a plasma. Clog's primary stopping power is the BPS (Brown-Preston-Singleton)
+as it traverses a plasma, and this directly influences the plasma
+heating. Clog's primary stopping power is the BPS (Brown-Preston-Singleton)
 theory. 
 
 Copyright (c) 2016, Los Alamos National Security, LLC All rights reserved.
@@ -14,10 +15,10 @@ Copyright 2016. Los Alamos National Security, LLC. This software was produced
 under U.S. Government contract DE-AC52-06NA25396 for Los Alamos National
 Laboratory (LANL), which is operated by Los Alamos National Security, LLC for
 the U.S. Department of Energy. The U.S. Government has rights to use, reproduce,
-and distribute thissoftware.  NEITHER THE GOVERNMENT NOR LOS ALAMOS NATIONAL
-SECURITY, LLC MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANYLIABILITY
+and distribute this software.  NEITHER THE GOVERNMENT NOR LOS ALAMOS NATIONAL
+SECURITY, LLC MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR ASSUMES ANY LIABILITY
 FOR THE USE OF THIS SOFTWARE.  If software is modified to produce derivative works,
-such modified software should beclearly marked, so as not to confuse it with the
+such modified software should be clearly marked, so as not to confuse it with the
 version available from LANL.
 
 Additionally, redistribution and use in source and binary forms, with or without
@@ -26,7 +27,7 @@ modification, are permitted provided that the following conditions are met:
 1.  Redistributions of source code must retain the above copyright notice, this list of conditions
 and the following disclaimer.
 
-2.  Redistributions in binary form must reproduce the above copyrightnotice, this list of conditions
+2.  Redistributions in binary form must reproduce the above copyright notice, this list of conditions
 and the following disclaimer in the documentation and/or other materials provided with the distribution.
 
 3. Neither the name of Los Alamos National Security, LLC, Los Alamos National Laboratory, LANL, the
