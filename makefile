@@ -9,7 +9,7 @@ CC = gcc
 #F90FLAGS = -O3  -g -fdefault-real-8
 #F90FLAGS = -g -fdefault-real-8
 #F90FLAGS = -O3 -g3 -fdefault-real-8 -Wall -ffast-math
-F90FLAGS = -g3 -fdefault-real-8 -Wall -ffast-math
+F90FLAGS = -g3 -fdefault-real-8 -Wall -ffast-math 
 
 LINK =
 #F90FLAGS = -O3  -g -r8 -pg
@@ -18,12 +18,9 @@ LINK =
 F77FLAGS = -g -fdefault-real-8
 CFLAGS = 
 
-OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.dedx.o
-
-
-
-
-
+#OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.dedx.o
+OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.table
+BPS.o
 
 
 #   1. main_make              <== admin script for main drivers
