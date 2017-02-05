@@ -51,13 +51,9 @@
 !
 ! stopping power
 !
-        WRITE(2,*) ne
-        WRITE(2,*) te
-        WRITE(2,*) ti
-        WRITE(2,*) nn
-        WRITE(2,*) ep, mp, zp
         de=ep/nn
         epp=0
+        WRITE(2,'(A, 4X,A, 3X,A10, 7X,A19, A9, 13X,A9 )') '#', 'j', 'E_p [keV]', 'dedx_tot [MeV/mu-m]', 'dedx_i', 'dedx_e'        
         DO j=0,nn
            epp=j*de
            IF (epp .EQ. 0) epp=1.E-5
@@ -84,26 +80,24 @@
 !
         j=0
         ep=0.5*mp*(vt(j)/CC)**2
-        CALL dedx_bps(nni, ep, zp, mp, betab, zb, mb, nb,   &
+        WRITE(1,'(A, 4X,A, X,A6, 5X,A15, 15X,A11, 5X,A15, 13X,A19, 3X,A6, 16X,A6 )') '#', 'j', 'tt [s]', & 
+             'xt [cm]','vt [cm/s]','E_p [keV]','dedx_tot [MeV/mu-m]','dedx_i','dedx_e'
+        Call dedx_bps(nni, ep, zp, mp, betab, zb, mb, nb,   &
             dedx_tot, dedx_i, dedx_e, dedxc_tot, dedxc_i, & 
             dedxc_e, dedxq_tot, dedxq_i, dedxq_e) ! [MeV/micron]
 
-        WRITE(1,*) ne
-        WRITE(1,*) te
-        WRITE(1,*) ti
-        WRITE(1,*) tmax, nts, nit
-        WRITE(1,*) ep, mp, zp
-        WRITE (6,'(I6,E17.8,6D22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
-        WRITE (1,'(I6,E17.8,6D22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
+        WRITE(6,'(I6,E17.8,6E22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
+        WRITE(1,'(I6,E17.8,6E22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
         DO j=1,nts
            CALL rk4(y,v,t,dt,nit,nni,zp,mp,dedx_tot,dedx_i,dedx_e)
-           tt(j)=t
-           xt(j)=y
-           vt(j)=v
-           ep   =0.5*mp*(vt(j)/CC)**2
-           WRITE (6,'(I6,E17.8,6D22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
-           WRITE (1,'(I6,E17.8,6D22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
+           tt(j)=t ! [s]
+           xt(j)=y ! [cm]
+           vt(j)=v ! [cms/s]
+           ep   =0.5*mp*(vt(j)/CC)**2 ! [keV]
+           WRITE (6,'(I6,E17.8,6E22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
+           WRITE (1,'(I6,E17.8,6E22.13)') j, tt(j), xt(j), vt(j), ep, dedx_tot, dedx_i, dedx_e
         END DO
+
         CLOSE (1)
         END PROGRAM range
 
