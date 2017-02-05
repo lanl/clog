@@ -19,8 +19,9 @@ F77FLAGS = -g -fdefault-real-8
 CFLAGS = 
 
 #OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.dedx.o
-OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.table
-BPS.o
+#OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.table.o
+OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.range.o
+
 
 
 #   1. main_make              <== admin script for main drivers
