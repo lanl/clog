@@ -42,11 +42,14 @@
         ep=3540.     ! [keV] Projectile energy  
         mp=4*MPKEV   ! [keV] Projectile mass    
         zp=2.        ! [e] Projectile charge  
+
         OPEN(1, FILE='range.001.out')
         OPEN(2, FILE='dedx.001.out')
+        CALL define_plasma_DT(te,ti,ne,nni)
 
-       CALL define_plasma_DT(te,ti,ne,nni)
-!        CALL define_plasma_DTH(te,ti,ne,nni)
+!       OPEN(1, FILE='range.002.out')
+!       OPEN(2, FILE='dedx.002.out')
+!       CALL define_plasma_H(te,ti,ne,nni)
 
         CALL write_header(ep,mp,zp,te,ti,ne,nni,betab,zb,mb,nb)
 !
@@ -352,7 +355,7 @@
 ! Returns the plasma species arrays: betab, mb, nb, zb
 ! Allocates other plasma arrays
 !
-      SUBROUTINE define_plasma_DTH(te, ti, ne, nni)
+      SUBROUTINE define_plasma_H(te, ti, ne, nni)
         
     USE allocatablevars
     USE physvars
@@ -368,19 +371,16 @@
 !     REAL,    DIMENSION(:), ALLOCATABLE  :: zb     ! [e]
 !     REAL,    DIMENSION(:), ALLOCATABLE  :: gb, etab, mpb, mbpb
 
-      nni=3  ! number of ion species
+      nni=1  ! number of ion species
 
       ALLOCATE(betab(1:nni+1),zb(1:nni+1),mb(nni+1),nb(1:nni+1))   ! allocatablevars
       ALLOCATE(gb(1:nni+1),etab(1:nni+1),mpb(nni+1),mbpb(1:nni+1)) ! allocatablevars
 
       zb(1)=-1.    ! Species charges
       zb(2)=+1.    ! 
-      zb(3)=+1.    !
-      zb(4)=+1.    !
       mb(1)=MEKEV  ! Species masses [keV]
-      mb(2)=2*MPKEV!
-      mb(3)=3*MPKEV!
-      mb(4)=MPKEV  !
+      mb(2)=MPKEV!
+!
 !no-doped plasma: n = nD = nT
 !doped plasma: np = npD = npT, nH = p np
 !same plasma density => np = n 5 / ( 5 + p )
@@ -392,7 +392,7 @@
       nb=nb*ne                          ! number density array [cm^-3]
       betab(1)=1./te                    ! inverse temp array   [keV^-1]
       betab(2:nni+1)=1./ti              !
-    END SUBROUTINE define_plasma_DTH
+    END SUBROUTINE define_plasma_H
 
 
 
