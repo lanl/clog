@@ -17,7 +17,7 @@
         INTEGER NTSMAX
         PARAMETER (NTSMAX=5000)
 
-        REAL    :: y, v, t, dt, tmax
+        REAL    :: y, v, t, dt, tmax, p
         REAL    :: xt(0:NTSMAX), vt(0:NTSMAX), tt(0:NTSMAX)
         REAL    :: dedx_tot,  dedx_i,  dedx_e
         REAL    :: dedxc_tot, dedxc_i, dedxc_e
@@ -30,7 +30,6 @@
 !
 ! Range parameters
 !
-                     ! 3 keV: range.002.out
         tmax=1.0E-11 ! [s]
         nts=100
         nit=10
@@ -43,14 +42,28 @@
         mp=4*MPKEV   ! [keV] Projectile mass    
         zp=2.        ! [e] Projectile charge  
 
-        OPEN(1, FILE='range.001.out')
-        OPEN(2, FILE='dedx.001.out')
-        CALL define_plasma_DT(te,ti,ne,nni)
+        ! ! DT equimolar
+        ! OPEN(1, FILE='range_DT.out')
+        ! OPEN(2, FILE='dedx_DT.out')
+        ! CALL define_plasma_DT(te,ti,ne,nni)
 
-!       OPEN(1, FILE='range.002.out')
-!       OPEN(2, FILE='dedx.002.out')
-!       CALL define_plasma_H(te,ti,ne,nni)
+        ! ! H
+        ! OPEN(1, FILE='range_H.out')
+        ! OPEN(2, FILE='dedx_H.out')
+        ! CALL define_plasma_H(te,ti,ne,nni)
 
+        ! DT doped with H, doping parameter p
+        ! OPEN(1, FILE='range_Hp0.out')
+        ! OPEN(2, FILE='dedx_Hp0.out')
+        ! p = 0.
+        ! CALL define_plasma_DTH(p, te,ti,ne,nni)                
+
+        ! DT doped with H, doping parameter p
+        OPEN(1, FILE='range_Hp1.out')
+        OPEN(2, FILE='dedx_Hp1.out')
+        p = 1.
+        CALL define_plasma_DTH(p, te,ti,ne,nni)                
+        
         CALL write_header(ep,mp,zp,te,ti,ne,nni,betab,zb,mb,nb)
 !
 ! stopping power
@@ -281,7 +294,6 @@
 !
 ! Print plasma parameters
 !
-
       CALL param(nni, betab, nb, gb, ge, gi, etae, ze)
       WRITE(6,'(A1, 2X,A9, 4X,A7, 4X,A7, 8X,A2, 7X,A2, 10X,A4, 9X,A9)') &
         '#','ne[cm^-3]','Te[keV]', 'Ti[keV]','ge','gi','etae','ze/2**1.5'
@@ -311,7 +323,7 @@
 ! Returns the plasma species arrays: betab, mb, nb, zb
 ! Allocates other plasma arrays
 !
-      SUBROUTINE define_plasma_DT(te, ti, ne, nni)
+    SUBROUTINE define_plasma_DT(te, ti, ne, nni)
         
     USE allocatablevars
     USE physvars
@@ -347,15 +359,12 @@
       betab(1)=1./te                    ! inverse temp array   [keV^-1]
       betab(2:nni+1)=1./ti              !
     END SUBROUTINE define_plasma_DT
-
-
-
-    !
+!
 ! SUBROUTINE define_plasma:
 ! Returns the plasma species arrays: betab, mb, nb, zb
 ! Allocates other plasma arrays
 !
-      SUBROUTINE define_plasma_H(te, ti, ne, nni)
+    SUBROUTINE define_plasma_H(te, ti, ne, nni)
         
     USE allocatablevars
     USE physvars
@@ -395,4 +404,43 @@
     END SUBROUTINE define_plasma_H
 
 
+    SUBROUTINE define_plasma_DTH(p, te, ti, ne, nni)
+        
+    USE allocatablevars
+    USE physvars
+      IMPLICIT NONE
+      REAL                                :: p      ! doping parameter
+      REAL                                :: te     ! [keV]
+      REAL                                :: ti     ! [keV]
+      REAL                                :: ne     ! [cm^-3]
+      INTEGER                             :: nni    ! number of ion species
+!     allocatablevars
+!     REAL,    DIMENSION(:), ALLOCATABLE  :: betab  ! [1/keV]
+!     REAL,    DIMENSION(:), ALLOCATABLE  :: mb     ! [keV]
+!     REAL,    DIMENSION(:), ALLOCATABLE  :: nb     ! [cm^-3]
+!     REAL,    DIMENSION(:), ALLOCATABLE  :: zb     ! [e]
+!     REAL,    DIMENSION(:), ALLOCATABLE  :: gb, etab, mpb, mbpb
 
+      nni = 3  ! D, T, H
+
+      ALLOCATE(betab(1:nni+1),zb(1:nni+1),mb(nni+1),nb(1:nni+1))   ! allocatablevars
+      ALLOCATE(gb(1:nni+1),etab(1:nni+1),mpb(nni+1),mbpb(1:nni+1)) ! allocatablevars
+
+      zb(1) = -1.    ! Species charges
+      zb(2) = +1.    ! 
+      zb(3) = +1.    !
+      zb(4) = +1.    !
+      mb(1) = MEKEV  ! Species masses [keV]
+      mb(2) = 2*MPKEV!
+      mb(3) = 3*MPKEV!
+      mb(4) = MPKEV  !
+!
+! Construct density and temperature arrays
+!
+      nb(1) = (5. * (2. + p)) / (2 * (5 + p))
+      nb(2) = nb(1) / (2. + p)
+      nb(3) = p * nb(1)
+      nb = nb * ne                        ! number density array [cm^-3]
+      betab(1) = 1./te                    ! inverse temp array   [keV^-1]
+      betab(2:nni+1) = 1./ti              !
+    END SUBROUTINE define_plasma_DTH
