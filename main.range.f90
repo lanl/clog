@@ -426,21 +426,22 @@
       ALLOCATE(betab(1:nni+1),zb(1:nni+1),mb(nni+1),nb(1:nni+1))   ! allocatablevars
       ALLOCATE(gb(1:nni+1),etab(1:nni+1),mpb(nni+1),mbpb(1:nni+1)) ! allocatablevars
 
-      zb(1) = -1.    ! Species charges
-      zb(2) = +1.    ! 
-      zb(3) = +1.    !
-      zb(4) = +1.    !
-      mb(1) = MEKEV  ! Species masses [keV]
-      mb(2) = 2*MPKEV!
-      mb(3) = 3*MPKEV!
-      mb(4) = MPKEV  !
+      zb(1) = -1.    ! e
+      zb(2) = +1.    ! D
+      zb(3) = +1.    ! T
+      zb(4) = +1.    ! H
+      mb(1) = MEKEV  ! e
+      mb(2) = 2*MPKEV! D
+      mb(3) = 3*MPKEV! T
+      mb(4) = MPKEV  ! P
 !
 ! Construct density and temperature arrays
 !
-      nb(1) = (5. * (2. + p)) / (2 * (5 + p))
-      nb(2) = nb(1) / (2. + p)
-      nb(3) = p * nb(1)
-      nb = nb * ne                        ! number density array [cm^-3]
-      betab(1) = 1./te                    ! inverse temp array   [keV^-1]
-      betab(2:nni+1) = 1./ti              !
+      nb(1) = (5. * (2. + p)) / (2 * (5 + p)) ! ne
+      nb(2) = nb(1) / (2. + p)                ! nD
+      nb(3) = nb(2)                           ! nT
+      nb(4) = p * nb(1)                       ! nH
+      nb = nb * ne                            ! number density array [cm^-3]
+      betab(1) = 1./te                        ! inverse temp array   [keV^-1]
+      betab(2:nni+1) = 1./ti                  !
     END SUBROUTINE define_plasma_DTH
