@@ -47,24 +47,36 @@
         ! OPEN(2, FILE='dedx_DT.out')
         ! CALL define_plasma_DT(te,ti,ne,nni)
 
-        ! ! H
-        ! OPEN(1, FILE='range_H.out')
-        ! OPEN(2, FILE='dedx_H.out')
-        ! CALL define_plasma_H(te,ti,ne,nni)
+        ! H
+        OPEN(1, FILE='range_H.out')
+        OPEN(2, FILE='dedx_H.out')
+        CALL define_plasma_H(te,ti,ne,nni)
 
-        ! DT doped with H, doping parameter p
+        ! ! DT doped with H, doping parameter p
         ! OPEN(1, FILE='range_Hp0.out')
         ! OPEN(2, FILE='dedx_Hp0.out')
         ! p = 0.
         ! CALL define_plasma_DTH(p, te,ti,ne,nni)                
 
-        ! DT doped with H, doping parameter p
-        OPEN(1, FILE='range_Hp1.out')
-        OPEN(2, FILE='dedx_Hp1.out')
-        p = 1.
-        CALL define_plasma_DTH(p, te,ti,ne,nni)                
-        
+        ! ! DT doped with H, doping parameter p
+        ! OPEN(1, FILE='range_Hp1.out')
+        ! OPEN(2, FILE='dedx_Hp1.out')
+        ! p = 1.
+        ! CALL define_plasma_DTH(p, te,ti,ne,nni)                
+
         CALL write_header(ep,mp,zp,te,ti,ne,nni,betab,zb,mb,nb)
+
+        !*!
+        de=ep/nn
+        epp=0
+        j=1
+        epp=j*de
+        CALL dedx_bps(nni, epp, zp, mp, betab, zb, mb, nb,   &
+             dedx_tot, dedx_i, dedx_e, dedxc_tot, dedxc_i,      & 
+             dedxc_e, dedxq_tot, dedxq_i, dedxq_e) ! [MeV/micron]
+        WRITE (6,'(I6,E17.8,6E22.13)') j, epp, dedx_tot, dedx_i, dedx_e
+        STOP
+        !*!
 !
 ! stopping power
 !
@@ -421,6 +433,10 @@
 !     REAL,    DIMENSION(:), ALLOCATABLE  :: zb     ! [e]
 !     REAL,    DIMENSION(:), ALLOCATABLE  :: gb, etab, mpb, mbpb
 
+      WRITE(6,'(A, 4X,A3, E22.13 )')  '#', "p=", p
+      WRITE(1,'(A, 4X,A3, E22.13 )')  '#', "p=", p
+      WRITE(2,'(A, 4X,A3, E22.13 )')  '#', "p=", p        
+      
       nni = 3  ! D, T, H
 
       ALLOCATE(betab(1:nni+1),zb(1:nni+1),mb(nni+1),nb(1:nni+1))   ! allocatablevars
