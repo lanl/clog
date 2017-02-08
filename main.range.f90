@@ -47,11 +47,6 @@
         ! OPEN(2, FILE='dedx_DT.out')
         ! CALL define_plasma_DT(te,ti,ne,nni)
 
-        ! H
-        OPEN(1, FILE='range_H.out')
-        OPEN(2, FILE='dedx_H.out')
-        CALL define_plasma_H(te,ti,ne,nni)
-
         ! ! DT doped with H, doping parameter p
         ! OPEN(1, FILE='range_Hp0.out')
         ! OPEN(2, FILE='dedx_Hp0.out')
@@ -64,19 +59,19 @@
         ! p = 1.
         ! CALL define_plasma_DTH(p, te,ti,ne,nni)                
 
-        CALL write_header(ep,mp,zp,te,ti,ne,nni,betab,zb,mb,nb)
+        ! ! DT doped with H, doping parameter p
+        ! OPEN(1, FILE='range_Hp05.out')
+        ! OPEN(2, FILE='dedx_Hp05.out')
+        ! p = 0.5
+        ! CALL define_plasma_DTH(p, te,ti,ne,nni)                
 
-        !*!
-        de=ep/nn
-        epp=0
-        j=1
-        epp=j*de
-        CALL dedx_bps(nni, epp, zp, mp, betab, zb, mb, nb,   &
-             dedx_tot, dedx_i, dedx_e, dedxc_tot, dedxc_i,      & 
-             dedxc_e, dedxq_tot, dedxq_i, dedxq_e) ! [MeV/micron]
-        WRITE (6,'(I6,E17.8,6E22.13)') j, epp, dedx_tot, dedx_i, dedx_e
-        STOP
-        !*!
+        ! DT doped with H, doping parameter p
+        OPEN(1, FILE='range_Hp01.out')
+        OPEN(2, FILE='dedx_Hp01.out')
+        p = 0.1
+        CALL define_plasma_DTH(p, te,ti,ne,nni)                
+        
+        CALL write_header(ep,mp,zp,te,ti,ne,nni,betab,zb,mb,nb)
 !
 ! stopping power
 !
@@ -321,12 +316,12 @@
       ab  =0.5*betab*mb*vp*vp/CC2  ! [dimensionless] (1/2) betab(ib)*mb(ib)*vp2/CC2
       etab=ABS(zp*zb)*2.1870E8/vp  ! [dimensionless]
 
-      WRITE(6,'(A7, 3D12.4)') '# ab  =', ab
-      WRITE(6,'(A7, 3D12.4)') '# etab=', etab
-      WRITE(1,'(A7, 3D12.4)') '# ab  =', ab
-      WRITE(1,'(A7, 3D12.4)') '# etab=', etab
-      WRITE(2,'(A7, 3D12.4)') '# ab  =', ab
-      WRITE(2,'(A7, 3D12.4)') '# etab=', etab
+      WRITE(6,'(A7, 4E12.4)') '# ab  =', ab
+      WRITE(6,'(A7, 4E12.4)') '# etab=', etab
+      WRITE(1,'(A7, 4E12.4)') '# ab  =', ab
+      WRITE(1,'(A7, 4E12.4)') '# etab=', etab
+      WRITE(2,'(A7, 4E12.4)') '# ab  =', ab
+      WRITE(2,'(A7, 4E12.4)') '# etab=', etab
 
     END SUBROUTINE write_header
 

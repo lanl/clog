@@ -23,7 +23,6 @@ CFLAGS =
 OBJ_FILES =  ferf.o vars.o mathvars.o physvars.o common.o rate.o acoeff.o dedx.o dedx.models.o main.range.o
 
 
-
 #   1. main_make              <== admin script for main drivers
 #      main.tgz               <== tar-ball created by main_make
 #      main.f90               <== template
