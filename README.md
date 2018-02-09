@@ -1,4 +1,4 @@
-# Coulomb Logarith
+# Coulomb Logarithm
 # clog 
 
 LA-CC-17-026
